@@ -3,6 +3,7 @@ package internal
 import (
 	"context"
 	"database/sql/driver"
+	"fmt"
 )
 
 type Driver struct {
@@ -28,7 +29,7 @@ func NewConn(dsn string) (*Conn, error) {
 }
 
 func (c *Conn) Begin() (driver.Tx, error) {
-	return &Tx{}, nil
+	return NewTx(c.dsn)
 }
 
 func (c *Conn) Prepare(query string) (driver.Stmt, error) {
@@ -44,6 +45,19 @@ func (c *Conn) Ping(ctx context.Context) error {
 }
 
 type Tx struct {
+	pager Pager
+}
+
+func NewTx(dsn string) (*Tx, error) {
+	pager, err := NewPager(dsn)
+
+	if err != nil {
+		return nil, fmt.Errorf("NewTx: %w", err)
+	}
+
+	return &Tx{
+		pager: pager,
+	}, nil
 }
 
 func (t *Tx) Commit() error {
@@ -61,19 +75,19 @@ func NewStmt(query string) (*Stmt, error) {
 	return &Stmt{}, nil
 }
 
-func (c *Stmt) NumInput() int {
+func (s *Stmt) NumInput() int {
 	return -1
 }
 
-func (c *Stmt) Exec(args []driver.Value) (driver.Result, error) {
+func (s *Stmt) Exec(args []driver.Value) (driver.Result, error) {
 	return &Result{}, nil
 }
 
-func (c *Stmt) Query(args []driver.Value) (driver.Rows, error) {
+func (s *Stmt) Query(args []driver.Value) (driver.Rows, error) {
 	return &Rows{}, nil
 }
 
-func (c *Stmt) Close() error {
+func (s *Stmt) Close() error {
 	return nil
 }
 
