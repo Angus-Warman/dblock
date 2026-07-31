@@ -3,6 +3,7 @@ package internal
 import (
 	"context"
 	"database/sql/driver"
+	"dblock2/internal/parser"
 	"fmt"
 )
 
@@ -19,17 +20,23 @@ func (d *Driver) Open(name string) (driver.Conn, error) {
 }
 
 type Conn struct {
-	dsn string
+	pager Pager
 }
 
 func NewConn(dsn string) (*Conn, error) {
+	pager, err := NewPager(dsn)
+
+	if err != nil {
+		return nil, fmt.Errorf("NewTx: %w", err)
+	}
+
 	return &Conn{
-		dsn: dsn,
+		pager: pager,
 	}, nil
 }
 
 func (c *Conn) Begin() (driver.Tx, error) {
-	return NewTx(c.dsn)
+	return c.NewTx()
 }
 
 func (c *Conn) Prepare(query string) (driver.Stmt, error) {
@@ -45,33 +52,30 @@ func (c *Conn) Ping(ctx context.Context) error {
 }
 
 type Tx struct {
-	pager Pager
+	conn *Conn
 }
 
-func NewTx(dsn string) (*Tx, error) {
-	pager, err := NewPager(dsn)
-
-	if err != nil {
-		return nil, fmt.Errorf("NewTx: %w", err)
-	}
-
+func (c *Conn) NewTx() (*Tx, error) {
 	return &Tx{
-		pager: pager,
+		conn: c,
 	}, nil
 }
 
 func (t *Tx) Commit() error {
-	return nil
+	return t.conn.pager.Commit()
 }
 
 func (t *Tx) Rollback() error {
-	return nil
+	return t.conn.pager.Rollback()
 }
 
 type Stmt struct {
 }
 
 func NewStmt(query string) (*Stmt, error) {
+	p := parser.New()
+	_ = p
+
 	return &Stmt{}, nil
 }
 
