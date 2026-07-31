@@ -3,10 +3,8 @@ package internal
 import (
 	"context"
 	"database/sql/driver"
-	"fmt"
 )
 
-// Driver implements [driver.Driver].
 type Driver struct {
 }
 
@@ -17,10 +15,6 @@ func NewDriver() driver.Driver {
 // Open implements [driver.Open].
 func (d *Driver) Open(name string) (driver.Conn, error) {
 	return NewConn(name)
-}
-
-func (c *Conn) Ping(ctx context.Context) error {
-	return nil
 }
 
 type Conn struct {
@@ -42,6 +36,10 @@ func (c *Conn) Prepare(query string) (driver.Stmt, error) {
 }
 
 func (c *Conn) Close() error {
+	return nil
+}
+
+func (c *Conn) Ping(ctx context.Context) error {
 	return nil
 }
 
@@ -68,13 +66,44 @@ func (c *Stmt) NumInput() int {
 }
 
 func (c *Stmt) Exec(args []driver.Value) (driver.Result, error) {
-	return nil, fmt.Errorf("WIP")
+	return &Result{}, nil
 }
 
 func (c *Stmt) Query(args []driver.Value) (driver.Rows, error) {
-	return nil, fmt.Errorf("wip")
+	return &Rows{}, nil
 }
 
 func (c *Stmt) Close() error {
+	return nil
+}
+
+type Result struct {
+}
+
+// LastInsertId implements [driver.Result].
+func (r *Result) LastInsertId() (int64, error) {
+	return -1, nil
+}
+
+// RowsAffected implements [driver.Result].
+func (r *Result) RowsAffected() (int64, error) {
+	return -1, nil
+}
+
+type Rows struct {
+}
+
+// Close implements [driver.Rows].
+func (r *Rows) Close() error {
+	return nil
+}
+
+// Columns implements [driver.Rows].
+func (r *Rows) Columns() []string {
+	return []string{}
+}
+
+// Next implements [driver.Rows].
+func (r *Rows) Next(dest []driver.Value) error {
 	return nil
 }

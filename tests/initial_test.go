@@ -26,3 +26,10 @@ func TestPrepare(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, prep)
 }
+
+func TestExecute(t *testing.T) {
+	db := openDB(t)
+	res, err := db.Exec("CREATE TABLE data (label TEXT, value INTEGER)")
+	require.NoError(t, err)
+	require.NotNil(t, res)
+}
