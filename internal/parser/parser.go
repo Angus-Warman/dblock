@@ -1,20 +1,17 @@
 package parser
 
-import "fmt"
+func Parse(query string) (*ParsedStmt, error) {
+	return sqlParser.ParseString("", query)
 
-type Parser struct {
-}
+	// if err != nil {
+	// 	return nil, nil, err
+	// }
 
-func New() *Parser {
-	return &Parser{}
-}
+	// if parsed.Create != nil {
+	// 	return &internal.ExecStmt{
+	// 		tableName: parsed.Create.Name,
+	// 	}, nil, nil
+	// }
 
-func (p *Parser) Parse(query string) (*ExecStmt, *QueryStmt, error) {
-	return nil, nil, fmt.Errorf("WIP")
-}
-
-type ExecStmt struct {
-}
-
-type QueryStmt struct {
+	// return nil, nil, fmt.Errorf("WIP")
 }

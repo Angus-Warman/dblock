@@ -66,7 +66,7 @@ type AlterColTypeOp struct {
 
 type CreateStmt struct {
 	ExistClause *ExistClause   `parser:"\"CREATE\" \"TABLE\" (@@)?"`
-	Name        string         `parser:"@Ident"`
+	TableName   string         `parser:"@Ident"`
 	Columns     []ParsedColumn `parser:"\"(\" @@ (\",\" @@)* \")\""`
 }
 

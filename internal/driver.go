@@ -40,7 +40,7 @@ func (c *Conn) Begin() (driver.Tx, error) {
 }
 
 func (c *Conn) Prepare(query string) (driver.Stmt, error) {
-	return NewStmt(query)
+	return c.NewStmt(query)
 }
 
 func (c *Conn) Close() error {
@@ -70,13 +70,29 @@ func (t *Tx) Rollback() error {
 }
 
 type Stmt struct {
+	conn      *Conn
+	execStmt  *ExecStmt
+	queryStmt *QueryStmt
 }
 
-func NewStmt(query string) (*Stmt, error) {
-	p := parser.New()
-	_ = p
+func (c *Conn) NewStmt(query string) (*Stmt, error) {
+	parsed, err := parser.Parse(query)
 
-	return &Stmt{}, nil
+	if err != nil {
+		return nil, err
+	}
+
+	stmt := &Stmt{
+		conn: c,
+	}
+
+	if parsed.Create != nil {
+		stmt.execStmt = &ExecStmt{
+			tableName: parsed.Create.TableName,
+		}
+	}
+
+	return stmt, nil
 }
 
 func (s *Stmt) NumInput() int {
@@ -84,7 +100,28 @@ func (s *Stmt) NumInput() int {
 }
 
 func (s *Stmt) Exec(args []driver.Value) (driver.Result, error) {
-	return &Result{}, nil
+	e, err := NewEngine(s.conn.pager)
+
+	if err != nil {
+		return nil, err
+	}
+
+	engineArgs := []any{}
+
+	for _, arg := range args {
+		engineArgs = append(engineArgs, arg)
+	}
+
+	lastInsertID, rowsAffected, err := e.Exec(s.execStmt, engineArgs)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &Result{
+		lastInsertID: lastInsertID,
+		rowsAffected: rowsAffected,
+	}, nil
 }
 
 func (s *Stmt) Query(args []driver.Value) (driver.Rows, error) {
@@ -96,6 +133,8 @@ func (s *Stmt) Close() error {
 }
 
 type Result struct {
+	lastInsertID int64
+	rowsAffected int64
 }
 
 // LastInsertId implements [driver.Result].

@@ -32,4 +32,6 @@ func TestExecute(t *testing.T) {
 	res, err := db.Exec("CREATE TABLE data (label TEXT, value INTEGER)")
 	require.NoError(t, err)
 	require.NotNil(t, res)
+	res, err = db.Exec("CREATE TABLE data (label TEXT, value INTEGER)")
+	require.Error(t, err, "table should already exist")
 }
