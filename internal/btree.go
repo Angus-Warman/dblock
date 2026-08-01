@@ -1,7 +1,9 @@
 package internal
 
 import (
+	"encoding/binary"
 	"errors"
+	"fmt"
 	"sort"
 )
 
@@ -150,6 +152,20 @@ func (t *Tree) Insert(key, value []byte) error {
 		return t.splitLeaf(leaf, path)
 	}
 	return nil
+}
+
+func (t *Tree) InsertNext(value []byte) (RowID, error) {
+	rowID := t.NextIntegerKey()
+
+	err := t.InsertAt(rowID, value)
+
+	return rowID, err
+}
+
+func (t *Tree) InsertAt(rowID RowID, value []byte) error {
+	key := EncodeKey(rowID)
+
+	return t.Insert(key, value)
 }
 
 func (t *Tree) insertIntoLeaf(leaf *Page, key, value []byte) error {
@@ -338,4 +354,37 @@ func (t *Tree) LastKey() ([]byte, bool) {
 	}
 
 	return leaf.Keys[len(leaf.Keys)-1], true
+}
+
+func (t *Tree) NextIntegerKey() RowID {
+	lastKey, ok := t.LastKey()
+
+	if !ok {
+		return 1
+	}
+
+	lastIntKey, err := NewDecoder(lastKey).GetInt64()
+
+	if err != nil {
+		return 1
+	}
+
+	next := lastIntKey + 1
+
+	return RowID(next)
+}
+
+func EncodeKey(id RowID) []byte {
+	buf := make([]byte, 8)
+	binary.BigEndian.PutUint64(buf, uint64(id))
+	return buf
+}
+
+func DecodeKey(buf []byte) RowID {
+	if len(buf) < 8 {
+		panic(fmt.Errorf("cannot decode key from buffer of length %v", len(buf)))
+	}
+
+	key := binary.BigEndian.Uint64(buf)
+	return RowID(key)
 }

@@ -11,6 +11,8 @@ var LE = binary.LittleEndian
 
 type PageID int64
 
+type RowID int64
+
 const RootSchemaPageID PageID = 0
 const MetadataLength = 100
 
@@ -100,9 +102,9 @@ type Page struct {
 func (p *Page) Encode() ([]byte, error) {
 	pageSize := PageSize
 
-	if p.ID == RootSchemaPageID {
-		pageSize = PageSize - MetadataLength
-	}
+	// if p.ID == RootSchemaPageID {
+	// 	pageSize = PageSize - MetadataLength
+	// }
 
 	var s slot
 	slotSize := s.size(p.IsLeaf)

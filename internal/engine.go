@@ -109,7 +109,7 @@ func (e *Engine) SaveSchemaObject(objectName, objectType string, definition []by
 
 	row := Row{Values: values}
 	encodedRow := row.Encode()
-	key := []byte(objectName)
 	rootTree := NewBtree(e.pager, RootSchemaPageID)
-	return rootTree.Insert(key, encodedRow)
+	_, err := rootTree.InsertNext(encodedRow)
+	return err
 }
