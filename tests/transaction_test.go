@@ -58,21 +58,21 @@ func TestRollback(t *testing.T) {
 	mustQueryColumn(t, db, "SELECT * FROM foo", 0, []any{"a"})
 }
 
-// func TestIsolation(t *testing.T) {
-// 	db := openDB(t)
-// 	mustExec(t, db, "CREATE TABLE foo (label TEXT)")
-// 	mustExec(t, db, "INSERT INTO foo VALUES ('a')")
-// 	tx, err := db.Begin()
-// 	require.NoError(t, err)
-// 	_, err = tx.Exec("INSERT INTO foo VALUES ('b')")
-// 	require.NoError(t, err)
+func TestIsolation(t *testing.T) {
+	db := openDB(t)
+	mustExec(t, db, "CREATE TABLE foo (label TEXT)")
+	mustExec(t, db, "INSERT INTO foo VALUES ('a')")
+	tx, err := db.Begin()
+	require.NoError(t, err)
+	_, err = tx.Exec("INSERT INTO foo VALUES ('b')")
+	require.NoError(t, err)
 
-// 	// DB only sees first
-// 	mustQueryOne(t, db, "SELECT * FROM foo", []any{"a"})
+	// DB only sees first
+	mustQueryOne(t, db, "SELECT * FROM foo", []any{"a"})
 
-// 	// Tx sees both
-// 	rows, err := tx.Query("SELECT * FROM foo")
-// 	require.NoError(t, err)
-// 	col := getColumn(t, rows, 0)
-// 	require.Equal(t, []any{"a", "b"}, col)
-// }
+	// Tx sees both
+	rows, err := tx.Query("SELECT * FROM foo")
+	require.NoError(t, err)
+	col := getColumn(t, rows, 0)
+	require.Equal(t, []any{"a", "b"}, col)
+}
