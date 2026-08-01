@@ -21,7 +21,7 @@ func (d *Driver) Open(name string) (driver.Conn, error) {
 }
 
 type Conn struct {
-	pager    Pager
+	pager    Pager // Shared pager
 	activeTx *Tx
 }
 
@@ -66,17 +66,19 @@ func (c *Conn) Ping(ctx context.Context) error {
 }
 
 type Tx struct {
-	conn *Conn
+	conn    *Conn
+	txPager *TxPager
 }
 
 func (c *Conn) NewTx() (*Tx, error) {
 	return &Tx{
-		conn: c,
+		conn:    c,
+		txPager: NewTxPager(c.pager),
 	}, nil
 }
 
 func (t *Tx) Commit() error {
-	err := t.conn.pager.Commit()
+	err := t.txPager.Commit()
 
 	if err != nil {
 		return fmt.Errorf("commit: %w", err)
@@ -87,7 +89,7 @@ func (t *Tx) Commit() error {
 }
 
 func (t *Tx) Rollback() error {
-	err := t.conn.pager.Rollback()
+	err := t.txPager.Rollback()
 
 	if err != nil {
 		return fmt.Errorf("rollback: %w", err)
@@ -158,12 +160,6 @@ func getEngineArgs(args []driver.Value) []any {
 }
 
 func (s *Stmt) Exec(args []driver.Value) (driver.Result, error) {
-	e, err := NewEngine(s.conn.pager)
-
-	if err != nil {
-		return nil, err
-	}
-
 	implicitTx := s.conn.activeTx == nil
 	if implicitTx {
 		_, err := s.conn.Begin()
@@ -171,6 +167,12 @@ func (s *Stmt) Exec(args []driver.Value) (driver.Result, error) {
 		if err != nil {
 			return nil, fmt.Errorf("Exec: %w", err)
 		}
+	}
+
+	e, err := NewEngine(s.conn.activeTx.txPager)
+
+	if err != nil {
+		return nil, err
 	}
 
 	engineArgs := getEngineArgs(args)
@@ -196,7 +198,16 @@ func (s *Stmt) Exec(args []driver.Value) (driver.Result, error) {
 }
 
 func (s *Stmt) Query(args []driver.Value) (driver.Rows, error) {
-	e, err := NewEngine(s.conn.pager)
+	implicitTx := s.conn.activeTx == nil
+	if implicitTx {
+		_, err := s.conn.Begin()
+
+		if err != nil {
+			return nil, fmt.Errorf("Exec: %w", err)
+		}
+	}
+
+	e, err := NewEngine(s.conn.activeTx.txPager)
 
 	if err != nil {
 		return nil, err
@@ -208,6 +219,14 @@ func (s *Stmt) Query(args []driver.Value) (driver.Rows, error) {
 
 	if err != nil {
 		return nil, err
+	}
+
+	if implicitTx {
+		err = s.conn.activeTx.Commit()
+
+		if err != nil {
+			return nil, fmt.Errorf("Exec: %w", err)
+		}
 	}
 
 	return &Rows{

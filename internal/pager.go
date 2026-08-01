@@ -5,20 +5,73 @@ import (
 	"sync"
 )
 
+type TxPager struct {
+	pager Pager
+	dirty map[PageID]*Page
+}
+
+// Close implements [Pager].
+func (p *TxPager) Close() error {
+	return p.pager.Close()
+}
+
+func NewTxPager(pager Pager) *TxPager {
+	return &TxPager{
+		pager: pager,
+		dirty: make(map[PageID]*Page),
+	}
+}
+
+func (p *TxPager) Commit() error {
+	for pageID, page := range p.dirty {
+		err := p.pager.PutPage(pageID, page)
+
+		if err != nil {
+			return fmt.Errorf("Commit: %w", err) // TODO needs to undo saved changes
+		}
+	}
+
+	p.dirty = make(map[PageID]*Page)
+	return nil
+}
+
+func (p *TxPager) Rollback() error {
+	p.dirty = make(map[PageID]*Page)
+	return nil
+}
+
+// NextID implements [Pager].
+func (p *TxPager) NextID() PageID {
+	return p.pager.NextID()
+}
+
+// PutPage implements [Pager].
+func (p *TxPager) PutPage(id PageID, page *Page) error {
+	p.dirty[id] = page
+	return nil
+}
+
+// GetPage implements [Pager].
+func (p *TxPager) GetPage(id PageID) (*Page, error) {
+	dirty, ok := p.dirty[id]
+
+	if ok {
+		return dirty, nil
+	}
+
+	return p.pager.GetPage(id)
+}
+
 type Pager interface {
 	GetPage(PageID) (*Page, error)
 	PutPage(PageID, *Page) error
 	NextID() PageID
-	Commit() error
-	Rollback() error
 	Close() error
 }
 
 type MemoryPager struct {
-	file     []byte
-	wal      []byte
-	nextID   PageID
-	baseNext PageID
+	file   []byte
+	nextID PageID
 }
 
 // pageOffset returns the byte range of the page with the given ID.
@@ -51,9 +104,9 @@ func (m *MemoryPager) PutPage(id PageID, page *Page) error {
 	if err != nil {
 		return err
 	}
-	m.wal = ensurePage(m.wal, id)
+	m.file = ensurePage(m.file, id)
 	start, end := pageOffset(id)
-	copy(m.wal[start:end], data)
+	copy(m.file[start:end], data)
 	return nil
 }
 
@@ -66,37 +119,23 @@ func (m *MemoryPager) GetPage(id PageID) (*Page, error) {
 	return Decode(m.file[start:end])
 }
 
-// Commit implements [Pager].
-func (m *MemoryPager) Commit() error {
-	m.file = append([]byte{}, m.wal...) // TODO should only replace dirty pages
-	m.baseNext = m.nextID
-	return nil
-}
-
-// Rollback implements [Pager].
-func (m *MemoryPager) Rollback() error {
-	m.wal = append([]byte{}, m.file...)
-	m.nextID = m.baseNext
-	return nil
-}
-
 var (
-	memDBsMu       sync.Mutex
+	memPagerLock   sync.Mutex
 	globalMemPager *MemoryPager
-	memDBRefs      = 0
+	memPagerREfs   = 0
 )
 
 func NewPager(dsn string) (Pager, error) {
 	if dsn == ":memory:" {
-		memDBsMu.Lock()
-		defer memDBsMu.Unlock()
+		memPagerLock.Lock()
+		defer memPagerLock.Unlock()
 
 		if globalMemPager == nil {
 			p := NewMemoryPager()
 			globalMemPager = p
 		}
 
-		memDBRefs++
+		memPagerREfs++
 		return globalMemPager, nil
 	}
 
@@ -104,11 +143,11 @@ func NewPager(dsn string) (Pager, error) {
 }
 
 func (p *MemoryPager) Close() error {
-	memDBsMu.Lock()
-	defer memDBsMu.Unlock()
+	memPagerLock.Lock()
+	defer memPagerLock.Unlock()
 
-	memDBRefs--
-	if memDBRefs > 0 {
+	memPagerREfs--
+	if memPagerREfs > 0 {
 		return nil
 	}
 

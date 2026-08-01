@@ -23,6 +23,12 @@ func mustExec(t *testing.T, db *sql.DB, query string, args ...any) {
 	require.NoError(t, err)
 }
 
+func mustExecTx(t *testing.T, tx *sql.Tx, query string, args ...any) {
+	t.Helper()
+	_, err := tx.Exec(query, args...)
+	require.NoError(t, err)
+}
+
 func mustQueryOne(t *testing.T, db *sql.DB, query string, expectedRow []any) {
 	t.Helper()
 	rows, err := db.Query(query)
