@@ -1,7 +1,5 @@
 package internal
 
-import "fmt"
-
 type Scanner interface {
 	Next() (key []byte, row Row, ok bool, err error)
 	Columns() []string
@@ -32,10 +30,10 @@ func (s *FullScanner) Next() (key []byte, row Row, ok bool, err error) {
 }
 
 func NewFullScanner(tree *Tree) (Scanner, error) {
-	start, end, ok := tree.KeyRange()
+	start, end, err := tree.KeyRange()
 
-	if !ok {
-		return nil, fmt.Errorf("no keys")
+	if err != nil {
+		return nil, err
 	}
 
 	cursor := tree.NewCursor(start, end)

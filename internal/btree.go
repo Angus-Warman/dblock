@@ -155,9 +155,13 @@ func (t *Tree) Insert(key, value []byte) error {
 }
 
 func (t *Tree) InsertNext(value []byte) (RowID, error) {
-	rowID := t.NextIntegerKey()
+	rowID, err := t.NextIntegerKey()
 
-	err := t.InsertAt(rowID, value)
+	if err != nil {
+		return 0, err
+	}
+
+	err = t.InsertAt(rowID, value)
 
 	return rowID, err
 }
@@ -309,40 +313,44 @@ func (t *Tree) All() ([][]byte, error) {
 	return result, nil
 }
 
-func (t *Tree) KeyRange() ([]byte, []byte, bool) {
-	first, ok := t.FirstKey()
+func (t *Tree) KeyRange() ([]byte, []byte, error) {
+	first, err := t.FirstKey()
 
-	if !ok {
-		return nil, nil, false
+	if err != nil {
+		return nil, nil, err
 	}
 
-	last, ok := t.LastKey()
+	last, err := t.LastKey()
 
-	if !ok {
-		return nil, nil, false
+	if err != nil {
+		return nil, nil, err
 	}
 
-	return first, last, true
+	return first, last, nil
 }
 
-func (t *Tree) FirstKey() ([]byte, bool) {
+func (t *Tree) FirstKey() ([]byte, error) {
 	leaf, _, err := t.findLeaf([]byte{0})
 
 	if err != nil {
-		return nil, false
+		return nil, err
 	}
 
 	if len(leaf.Keys) < 1 {
-		return nil, false
+		return EncodeKey(0), nil
 	}
 
-	return leaf.Keys[0], true
+	return leaf.Keys[0], nil
 }
 
-func (t *Tree) LastKey() ([]byte, bool) {
+func (t *Tree) LastKey() ([]byte, error) {
 	leaf, _, err := t.findLeaf([]byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff})
-	if err != nil || len(leaf.Keys) == 0 {
-		return nil, false
+	if err != nil {
+		return nil, err
+	}
+
+	if len(leaf.Keys) == 0 {
+		return EncodeKey(0), nil
 	}
 
 	for leaf.NextLeaf != 0 {
@@ -353,25 +361,25 @@ func (t *Tree) LastKey() ([]byte, bool) {
 		leaf = next
 	}
 
-	return leaf.Keys[len(leaf.Keys)-1], true
+	return leaf.Keys[len(leaf.Keys)-1], nil
 }
 
-func (t *Tree) NextIntegerKey() RowID {
-	lastKey, ok := t.LastKey()
+func (t *Tree) NextIntegerKey() (RowID, error) {
+	lastKey, err := t.LastKey()
 
-	if !ok {
-		return 1
+	if err != nil {
+		return 0, err
 	}
 
 	lastIntKey, err := NewDecoder(lastKey).GetInt64()
 
 	if err != nil {
-		return 1
+		return 0, err
 	}
 
 	next := lastIntKey + 1
 
-	return RowID(next)
+	return RowID(next), nil
 }
 
 func EncodeKey(id RowID) []byte {

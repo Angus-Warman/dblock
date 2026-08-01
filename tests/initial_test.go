@@ -46,6 +46,14 @@ func TestSelectTables(t *testing.T) {
 	require.Equal(t, []any{"foo", "bar"}, col)
 }
 
+func TestSelectEmpty(t *testing.T) {
+	db := openDB(t)
+	rows, err := db.Query("SELECT * FROM dblock_schema")
+	require.NoError(t, err)
+	col := getColumn(t, rows, 0)
+	require.Equal(t, []any{}, col)
+}
+
 func mustExec(t *testing.T, db *sql.DB, query string) {
 	t.Helper()
 	_, err := db.Exec(query)
