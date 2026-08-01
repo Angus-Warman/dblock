@@ -67,6 +67,8 @@ func getRows(t *testing.T, rows *sql.Rows) [][]any {
 	require.NoError(t, err)
 	rowValues := [][]any{}
 
+	defer rows.Close()
+
 	for rows.Next() {
 		require.NoError(t, rows.Err())
 		rowVals := make([]any, len(colNames))
