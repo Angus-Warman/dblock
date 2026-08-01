@@ -15,10 +15,27 @@ type Pager interface {
 }
 
 type MemoryPager struct {
-	pages     map[PageID][]byte
-	committed map[PageID][]byte
-	nextID    PageID
-	baseNext  PageID
+	file     []byte
+	wal      []byte
+	nextID   PageID
+	baseNext PageID
+}
+
+// pageOffset returns the byte range of the page with the given ID.
+func pageOffset(id PageID) (int, int) {
+	start := int(id) * PageSize
+	return start, start + PageSize
+}
+
+// ensure grows the slice so the page with the given ID fits.
+func ensurePage(buf []byte, id PageID) []byte {
+	_, end := pageOffset(id)
+	if end > len(buf) {
+		next := make([]byte, end)
+		copy(next, buf)
+		return next
+	}
+	return buf
 }
 
 // NextID implements [Pager].
@@ -34,39 +51,33 @@ func (m *MemoryPager) PutPage(id PageID, page *Page) error {
 	if err != nil {
 		return err
 	}
-	m.pages[id] = data
+	m.wal = ensurePage(m.wal, id)
+	start, end := pageOffset(id)
+	copy(m.wal[start:end], data)
 	return nil
 }
 
 // GetPage implements [Pager].
 func (m *MemoryPager) GetPage(id PageID) (*Page, error) {
-	data, ok := m.pages[id]
-	if !ok {
+	start, end := pageOffset(id)
+	if end > len(m.file) {
 		return nil, ErrEmptyPage
 	}
-	return Decode(data)
+	return Decode(m.file[start:end])
 }
 
 // Commit implements [Pager].
 func (m *MemoryPager) Commit() error {
-	m.committed = clonePages(m.pages)
+	m.file = append([]byte{}, m.wal...) // TODO should only replace dirty pages
 	m.baseNext = m.nextID
 	return nil
 }
 
 // Rollback implements [Pager].
 func (m *MemoryPager) Rollback() error {
-	m.pages = clonePages(m.committed)
+	m.wal = append([]byte{}, m.file...)
 	m.nextID = m.baseNext
 	return nil
-}
-
-func clonePages(src map[PageID][]byte) map[PageID][]byte {
-	dst := make(map[PageID][]byte, len(src))
-	for id, data := range src {
-		dst[id] = append([]byte{}, data...)
-	}
-	return dst
 }
 
 var (
@@ -107,8 +118,6 @@ func (p *MemoryPager) Close() error {
 
 func NewMemoryPager() *MemoryPager {
 	return &MemoryPager{
-		pages:     map[PageID][]byte{},
-		committed: map[PageID][]byte{},
-		nextID:    1, // RootSchemaPageID (0) is reserved
+		nextID: 1, // RootSchemaPageID (0) is reserved
 	}
 }

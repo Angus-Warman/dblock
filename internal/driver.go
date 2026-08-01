@@ -21,7 +21,8 @@ func (d *Driver) Open(name string) (driver.Conn, error) {
 }
 
 type Conn struct {
-	pager Pager
+	pager    Pager
+	activeTx *Tx
 }
 
 func NewConn(dsn string) (*Conn, error) {
@@ -37,7 +38,19 @@ func NewConn(dsn string) (*Conn, error) {
 }
 
 func (c *Conn) Begin() (driver.Tx, error) {
-	return c.NewTx()
+	if c.activeTx != nil {
+		return nil, fmt.Errorf("a transaction already exists")
+	}
+
+	tx, err := c.NewTx()
+
+	if err != nil {
+		return nil, fmt.Errorf("Begin: %w", err)
+	}
+
+	c.activeTx = tx
+
+	return tx, nil
 }
 
 func (c *Conn) Prepare(query string) (driver.Stmt, error) {
@@ -63,11 +76,25 @@ func (c *Conn) NewTx() (*Tx, error) {
 }
 
 func (t *Tx) Commit() error {
-	return t.conn.pager.Commit()
+	err := t.conn.pager.Commit()
+
+	if err != nil {
+		return fmt.Errorf("commit: %w", err)
+	}
+
+	t.conn.activeTx = nil
+	return nil
 }
 
 func (t *Tx) Rollback() error {
-	return t.conn.pager.Rollback()
+	err := t.conn.pager.Rollback()
+
+	if err != nil {
+		return fmt.Errorf("rollback: %w", err)
+	}
+
+	t.conn.activeTx = nil
+	return nil
 }
 
 type Stmt struct {
@@ -137,12 +164,29 @@ func (s *Stmt) Exec(args []driver.Value) (driver.Result, error) {
 		return nil, err
 	}
 
+	implicitTx := s.conn.activeTx == nil
+	if implicitTx {
+		_, err := s.conn.Begin()
+
+		if err != nil {
+			return nil, fmt.Errorf("Exec: %w", err)
+		}
+	}
+
 	engineArgs := getEngineArgs(args)
 
 	lastInsertID, rowsAffected, err := e.Exec(s.execStmt, engineArgs)
 
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("Exec: %w", err)
+	}
+
+	if implicitTx {
+		err = s.conn.activeTx.Commit()
+
+		if err != nil {
+			return nil, fmt.Errorf("Exec: %w", err)
+		}
 	}
 
 	return &Result{
