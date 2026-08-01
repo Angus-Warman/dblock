@@ -68,6 +68,20 @@ func (e *Engine) GetRootSchema() (*RootSchema, error) {
 	}, nil
 }
 
+func (e *Engine) Query(stmt *QueryStmt, args []any) (Scanner, error) {
+	return e.SelectAllFromTable(stmt.tableName)
+}
+
+func (e *Engine) SelectAllFromTable(tableName string) (Scanner, error) {
+	if tableName == "dblock_schema" {
+		rootpage := 0
+		tree := NewBtree(e.pager, PageID(rootpage))
+		return NewFullScanner(tree)
+	}
+
+	return nil, fmt.Errorf("WIP")
+}
+
 func (e *Engine) CreateTable(def *TableDefinition) error {
 	if def == nil {
 		return fmt.Errorf("table definition is null")

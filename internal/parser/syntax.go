@@ -77,15 +77,15 @@ type InsertStmt struct {
 }
 
 type SelectStmt struct {
-	Select  SelectList     `parser:"\"SELECT\" @@"`
-	Name    string         `parser:"(\"FROM\" @Ident)?"`
-	Alias   string         `parser:"(@Ident)?"`
-	Joins   []JoinClause   `parser:"(@@)*"`
-	Where   *WhereClause   `parser:"(@@)?"`
-	GroupBy *GroupByClause `parser:"(@@)?"`
-	OrderBy *OrderByClause `parser:"(@@)?"`
-	Limit   *LimitClause   `parser:"(@@)?"`
-	Offset  *OffsetClause  `parser:"(@@)?"`
+	Select    SelectList     `parser:"\"SELECT\" @@"`
+	TableName string         `parser:"(\"FROM\" @Ident)?"`
+	Alias     string         `parser:"(@Ident)?"`
+	Joins     []JoinClause   `parser:"(@@)*"`
+	Where     *WhereClause   `parser:"(@@)?"`
+	GroupBy   *GroupByClause `parser:"(@@)?"`
+	OrderBy   *OrderByClause `parser:"(@@)?"`
+	Limit     *LimitClause   `parser:"(@@)?"`
+	Offset    *OffsetClause  `parser:"(@@)?"`
 }
 
 type JoinClause struct {

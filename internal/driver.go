@@ -5,6 +5,7 @@ import (
 	"database/sql/driver"
 	"dblock2/internal/parser"
 	"fmt"
+	"io"
 )
 
 type Driver struct {
@@ -92,11 +93,27 @@ func (c *Conn) NewStmt(query string) (*Stmt, error) {
 		}
 	}
 
+	if parsed.Select != nil {
+		stmt.queryStmt = &QueryStmt{
+			tableName: parsed.Select.TableName,
+		}
+	}
+
 	return stmt, nil
 }
 
 func (s *Stmt) NumInput() int {
 	return -1
+}
+
+func getEngineArgs(args []driver.Value) []any {
+	engineArgs := []any{}
+
+	for _, arg := range args {
+		engineArgs = append(engineArgs, arg)
+	}
+
+	return engineArgs
 }
 
 func (s *Stmt) Exec(args []driver.Value) (driver.Result, error) {
@@ -106,11 +123,7 @@ func (s *Stmt) Exec(args []driver.Value) (driver.Result, error) {
 		return nil, err
 	}
 
-	engineArgs := []any{}
-
-	for _, arg := range args {
-		engineArgs = append(engineArgs, arg)
-	}
+	engineArgs := getEngineArgs(args)
 
 	lastInsertID, rowsAffected, err := e.Exec(s.execStmt, engineArgs)
 
@@ -125,7 +138,23 @@ func (s *Stmt) Exec(args []driver.Value) (driver.Result, error) {
 }
 
 func (s *Stmt) Query(args []driver.Value) (driver.Rows, error) {
-	return &Rows{}, nil
+	e, err := NewEngine(s.conn.pager)
+
+	if err != nil {
+		return nil, err
+	}
+
+	engineArgs := getEngineArgs(args)
+
+	scanner, err := e.Query(s.queryStmt, engineArgs)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &Rows{
+		scanner: scanner,
+	}, nil
 }
 
 func (s *Stmt) Close() error {
@@ -148,6 +177,7 @@ func (r *Result) RowsAffected() (int64, error) {
 }
 
 type Rows struct {
+	scanner Scanner
 }
 
 // Close implements [driver.Rows].
@@ -157,10 +187,23 @@ func (r *Rows) Close() error {
 
 // Columns implements [driver.Rows].
 func (r *Rows) Columns() []string {
-	return []string{}
+	return r.scanner.Columns()
 }
 
 // Next implements [driver.Rows].
 func (r *Rows) Next(dest []driver.Value) error {
+	_, row, ok, err := r.scanner.Next()
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return io.EOF
+	}
+
+	for i, v := range row.Values {
+		if i < len(dest) {
+			dest[i] = v
+		}
+	}
 	return nil
 }

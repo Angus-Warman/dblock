@@ -5,4 +5,5 @@ type ExecStmt struct {
 }
 
 type QueryStmt struct {
+	tableName string
 }
