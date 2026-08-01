@@ -1,19 +1,11 @@
 package tests
 
 import (
-	"database/sql"
 	_ "dblock2"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
-
-func openDB(t *testing.T) *sql.DB {
-	t.Helper()
-	db, err := sql.Open("dblock", ":memory:")
-	require.NoError(t, err)
-	return db
-}
 
 func TestPing(t *testing.T) {
 	db := openDB(t)
@@ -54,32 +46,9 @@ func TestSelectEmpty(t *testing.T) {
 	require.Equal(t, []any{}, col)
 }
 
-func mustExec(t *testing.T, db *sql.DB, query string) {
-	t.Helper()
-	_, err := db.Exec(query)
-	require.NoError(t, err)
-}
-
-func getColumn(t *testing.T, rows *sql.Rows, colIdx int) []any {
-	t.Helper()
-
-	colNames, err := rows.Columns()
-	require.NoError(t, err)
-	colValues := []any{}
-
-	for rows.Next() {
-		require.NoError(t, rows.Err())
-		rowVals := make([]any, len(colNames))
-		rowPtrs := make([]any, len(colNames))
-
-		for i := range rowVals {
-			rowPtrs[i] = &rowVals[i]
-		}
-
-		err := rows.Scan(rowPtrs...)
-		require.NoError(t, err)
-		colValues = append(colValues, rowVals[colIdx])
-	}
-
-	return colValues
+func TestInsert(t *testing.T) {
+	db := openDB(t)
+	mustExec(t, db, "CREATE TABLE foo (label TEXT, value INTEGER)")
+	mustExec(t, db, "INSERT INTO foo VALUES (?, ?)", "bar", 42)
+	mustQueryOne(t, db, "SELECT * FROM foo", []any{"bar", int64(42)})
 }

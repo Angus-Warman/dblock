@@ -88,8 +88,23 @@ func (c *Conn) NewStmt(query string) (*Stmt, error) {
 	}
 
 	if parsed.Create != nil {
+		columns := make([]string, len(parsed.Create.Columns))
+		for i, c := range parsed.Create.Columns {
+			columns[i] = c.Name
+		}
 		stmt.execStmt = &ExecStmt{
-			tableName: parsed.Create.TableName,
+			createStmt: &CreateStmt{
+				tableName:   parsed.Create.TableName,
+				columnNames: columns,
+			},
+		}
+	}
+
+	if parsed.Insert != nil {
+		stmt.execStmt = &ExecStmt{
+			insertStmt: &InsertStmt{
+				tableName: parsed.Insert.Name,
+			},
 		}
 	}
 

@@ -6,13 +6,13 @@ type Scanner interface {
 }
 
 type FullScanner struct {
-	cursor *Cursor
-	pos    int64
+	cursor  *Cursor
+	columns []string
 }
 
 // Columns implements [Scanner].
 func (s *FullScanner) Columns() []string {
-	return []string{"object_name", "object_type", "definition", "rootpage"}
+	return s.columns
 }
 
 // Next implements [Scanner].
@@ -29,7 +29,7 @@ func (s *FullScanner) Next() (key []byte, row Row, ok bool, err error) {
 	return k, row, true, nil
 }
 
-func NewFullScanner(tree *Tree) (Scanner, error) {
+func NewFullScanner(tree *Tree, columns []string) (Scanner, error) {
 	start, end, err := tree.KeyRange()
 
 	if err != nil {
@@ -39,6 +39,7 @@ func NewFullScanner(tree *Tree) (Scanner, error) {
 	cursor := tree.NewCursor(start, end)
 
 	return &FullScanner{
-		cursor: cursor,
+		cursor:  cursor,
+		columns: columns,
 	}, nil
 }

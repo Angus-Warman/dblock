@@ -1,0 +1,68 @@
+package tests
+
+import (
+	"database/sql"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+)
+
+func openDB(t *testing.T) *sql.DB {
+	t.Helper()
+	db, err := sql.Open("dblock", ":memory:")
+	require.NoError(t, err)
+	return db
+}
+
+func mustExec(t *testing.T, db *sql.DB, query string, args ...any) {
+	t.Helper()
+	_, err := db.Exec(query, args...)
+	require.NoError(t, err)
+}
+
+func mustQueryOne(t *testing.T, db *sql.DB, query string, expectedRow []any) {
+	t.Helper()
+	rows, err := db.Query(query)
+	require.NoError(t, err)
+	rowVals := getRows(t, rows)
+	require.GreaterOrEqual(t, 1, len(rowVals))
+	require.Equal(t, expectedRow, rowVals[0])
+}
+
+func getColumn(t *testing.T, rows *sql.Rows, colIdx int) []any {
+	t.Helper()
+
+	rowValues := getRows(t, rows)
+
+	colValues := []any{}
+
+	for rowIdx := range rowValues {
+		colValues = append(colValues, rowValues[rowIdx][colIdx])
+	}
+
+	return colValues
+}
+
+func getRows(t *testing.T, rows *sql.Rows) [][]any {
+	t.Helper()
+
+	colNames, err := rows.Columns()
+	require.NoError(t, err)
+	rowValues := [][]any{}
+
+	for rows.Next() {
+		require.NoError(t, rows.Err())
+		rowVals := make([]any, len(colNames))
+		rowPtrs := make([]any, len(colNames))
+
+		for i := range rowVals {
+			rowPtrs[i] = &rowVals[i]
+		}
+
+		err := rows.Scan(rowPtrs...)
+		require.NoError(t, err)
+		rowValues = append(rowValues, rowVals)
+	}
+
+	return rowValues
+}
