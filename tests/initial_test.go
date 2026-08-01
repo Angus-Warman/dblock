@@ -52,3 +52,27 @@ func TestInsert(t *testing.T) {
 	mustExec(t, db, "INSERT INTO foo VALUES (?, ?)", "bar", 42)
 	mustQueryOne(t, db, "SELECT * FROM foo", []any{"bar", int64(42)})
 }
+
+func TestMultipleTables(t *testing.T) {
+	db := openDB(t)
+	mustExec(t, db, "CREATE TABLE a (label TEXT)")
+	mustExec(t, db, "CREATE TABLE b (label TEXT)")
+	mustExec(t, db, "INSERT INTO a VALUES (?)", "a value")
+	mustExec(t, db, "INSERT INTO b VALUES (?)", "b value")
+	mustQueryOne(t, db, "SELECT * FROM a", []any{"a value"})
+	mustQueryOne(t, db, "SELECT * FROM b", []any{"b value"})
+}
+
+func TestInsertLiteral(t *testing.T) {
+	db := openDB(t)
+	mustExec(t, db, "CREATE TABLE foo (label TEXT)")
+	mustExec(t, db, "INSERT INTO foo VALUES ('bar')")
+	mustQueryOne(t, db, "SELECT * FROM foo", []any{"bar"})
+}
+
+func TestInsertMixedLiteral(t *testing.T) {
+	db := openDB(t)
+	mustExec(t, db, "CREATE TABLE foo (a TEXT, b TEXT)")
+	mustExec(t, db, "INSERT INTO foo VALUES ('a', ?)", "b")
+	mustQueryOne(t, db, "SELECT * FROM foo", []any{"a", "b"})
+}

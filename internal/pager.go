@@ -1,6 +1,9 @@
 package internal
 
-import "fmt"
+import (
+	"fmt"
+	"sync"
+)
 
 type Pager interface {
 	GetPage(PageID) (*Page, error)
@@ -8,6 +11,7 @@ type Pager interface {
 	NextID() PageID
 	Commit() error
 	Rollback() error
+	Close() error
 }
 
 type MemoryPager struct {
@@ -65,12 +69,40 @@ func clonePages(src map[PageID][]byte) map[PageID][]byte {
 	return dst
 }
 
+var (
+	memDBsMu       sync.Mutex
+	globalMemPager *MemoryPager
+	memDBRefs      = 0
+)
+
 func NewPager(dsn string) (Pager, error) {
 	if dsn == ":memory:" {
-		return NewMemoryPager(), nil
+		memDBsMu.Lock()
+		defer memDBsMu.Unlock()
+
+		if globalMemPager == nil {
+			p := NewMemoryPager()
+			globalMemPager = p
+		}
+
+		memDBRefs++
+		return globalMemPager, nil
 	}
 
 	return nil, fmt.Errorf("WIP")
+}
+
+func (p *MemoryPager) Close() error {
+	memDBsMu.Lock()
+	defer memDBsMu.Unlock()
+
+	memDBRefs--
+	if memDBRefs > 0 {
+		return nil
+	}
+
+	globalMemPager = nil
+	return nil
 }
 
 func NewMemoryPager() *MemoryPager {

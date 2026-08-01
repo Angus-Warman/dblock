@@ -12,6 +12,7 @@ type CreateStmt struct {
 
 type InsertStmt struct {
 	tableName string
+	values    []any // Either a placholder ?, or parsed literal value
 }
 
 type QueryStmt struct {

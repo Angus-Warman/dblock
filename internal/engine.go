@@ -149,7 +149,24 @@ func (e *Engine) Insert(stmt *InsertStmt, args []any) (insertedID int64, rowsAff
 		return -1, -1, err
 	}
 
-	row := Row{Values: args}
+	values := make([]any, 0, len(stmt.values))
+	argIdx := 0
+
+	for _, v := range stmt.values {
+		if v == "?" {
+			if argIdx >= len(args) {
+				return -1, -1, fmt.Errorf("Insert: missing argument for placeholder %d", argIdx+1)
+			}
+
+			values = append(values, args[argIdx])
+			argIdx++
+			continue
+		}
+
+		values = append(values, v)
+	}
+
+	row := Row{Values: values}
 	encodedRow := row.Encode()
 	tree := NewBtree(e.pager, info.rootPage)
 	rowID, err := tree.InsertNext(encodedRow)

@@ -71,9 +71,9 @@ type CreateStmt struct {
 }
 
 type InsertStmt struct {
-	Name    string   `parser:"\"INSERT\" \"INTO\" @Ident"`
-	Columns []string `parser:"(\"(\" @Ident (\",\" @Ident)* \")\")?"`
-	Values  []value  `parser:"\"VALUES\" \"(\" @@ (\",\" @@)* \")\""`
+	TableName string   `parser:"\"INSERT\" \"INTO\" @Ident"`
+	Columns   []string `parser:"(\"(\" @Ident (\",\" @Ident)* \")\")?"`
+	Values    []Value  `parser:"\"VALUES\" \"(\" @@ (\",\" @@)* \")\""`
 }
 
 type SelectStmt struct {
@@ -129,7 +129,7 @@ func (c ColumnAlias) Column() string {
 type UpdateStmt struct {
 	Name   string       `parser:"\"UPDATE\" @Ident"`
 	Column string       `parser:"\"SET\" @Ident"`
-	Value  value        `parser:"\"=\" @@"`
+	Value  Value        `parser:"\"=\" @@"`
 	Where  *WhereClause `parser:"(@@)?"`
 }
 
@@ -147,7 +147,7 @@ type ParsedColumn struct {
 type WhereClause struct {
 	Column     ColumnAlias `parser:"\"WHERE\" @Ident"`
 	Op         string      `parser:"@Cmp"`
-	Value      value       `parser:"@@"`
+	Value      Value       `parser:"@@"`
 	Conditions []Condition `parser:"(@@)*"`
 }
 
@@ -155,7 +155,7 @@ type Condition struct {
 	Bool   string      `parser:"@(\"AND\" | \"OR\")"`
 	Column ColumnAlias `parser:"@Ident"`
 	Op     string      `parser:"@Cmp"`
-	Value  value       `parser:"@@"`
+	Value  Value       `parser:"@@"`
 }
 
 type GroupByClause struct {
@@ -179,14 +179,14 @@ type OffsetClause struct {
 	Count string `parser:"\"OFFSET\" @Number"`
 }
 
-type value struct {
-	Num  string `parser:"  @Number"`
-	Hex  string `parser:"| @Hex"`
-	Str  string `parser:"| @String"`
-	Null string `parser:"| @Null"`
-	Bool string `parser:"| @True | @False"`
-	Uuid string `parser:"| @Uuid"`
-	Arg  string `parser:"| @Arg"`
+type Value struct {
+	Num   string `parser:"  @Number"`
+	Bytes string `parser:"| @Hex"`
+	Str   string `parser:"| @String"`
+	Null  string `parser:"| @Null"`
+	Bool  string `parser:"| @True | @False"`
+	Uuid  string `parser:"| @Uuid"`
+	Arg   string `parser:"| @Arg"`
 }
 
 type SelectItem struct {

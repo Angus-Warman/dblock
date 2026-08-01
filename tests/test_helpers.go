@@ -11,6 +11,9 @@ func openDB(t *testing.T) *sql.DB {
 	t.Helper()
 	db, err := sql.Open("dblock", ":memory:")
 	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, db.Close())
+	})
 	return db
 }
 
@@ -27,6 +30,14 @@ func mustQueryOne(t *testing.T, db *sql.DB, query string, expectedRow []any) {
 	rowVals := getRows(t, rows)
 	require.GreaterOrEqual(t, 1, len(rowVals))
 	require.Equal(t, expectedRow, rowVals[0])
+}
+
+func mustQueryColumn(t *testing.T, db *sql.DB, query string, colIdx int, expectedCol []any) {
+	t.Helper()
+	rows, err := db.Query(query)
+	require.NoError(t, err)
+	colVals := getColumn(t, rows, colIdx)
+	require.Equal(t, expectedCol, colVals)
 }
 
 func getColumn(t *testing.T, rows *sql.Rows, colIdx int) []any {

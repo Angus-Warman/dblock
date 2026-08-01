@@ -45,7 +45,7 @@ func (c *Conn) Prepare(query string) (driver.Stmt, error) {
 }
 
 func (c *Conn) Close() error {
-	return nil
+	return c.pager.Close()
 }
 
 func (c *Conn) Ping(ctx context.Context) error {
@@ -88,24 +88,23 @@ func (c *Conn) NewStmt(query string) (*Stmt, error) {
 	}
 
 	if parsed.Create != nil {
-		columns := make([]string, len(parsed.Create.Columns))
-		for i, c := range parsed.Create.Columns {
-			columns[i] = c.Name
+		exec, err := resolveCreate(parsed.Create)
+
+		if err != nil {
+			return nil, err
 		}
-		stmt.execStmt = &ExecStmt{
-			createStmt: &CreateStmt{
-				tableName:   parsed.Create.TableName,
-				columnNames: columns,
-			},
-		}
+
+		stmt.execStmt = exec
 	}
 
 	if parsed.Insert != nil {
-		stmt.execStmt = &ExecStmt{
-			insertStmt: &InsertStmt{
-				tableName: parsed.Insert.Name,
-			},
+		exec, err := resolveInsert(parsed.Insert)
+
+		if err != nil {
+			return nil, err
 		}
+
+		stmt.execStmt = exec
 	}
 
 	if parsed.Select != nil {
