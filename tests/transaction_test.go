@@ -33,17 +33,17 @@ func TestReadDuringTransaction(t *testing.T) {
 	require.Equal(t, []any{"a"}, getColumn(t, rows, 0))
 }
 
-// func TestCommit(t *testing.T) {
-// 	db := openDB(t)
-// 	mustExec(t, db, "CREATE TABLE foo (label TEXT)")
-// 	mustExec(t, db, "INSERT INTO foo VALUES ('a')")
-// 	tx, err := db.Begin()
-// 	require.NoError(t, err)
-// 	_, err = tx.Exec("INSERT INTO foo VALUES ('b')")
-// 	require.NoError(t, err)
-// 	require.NoError(t, tx.Commit())
-// 	mustQueryColumn(t, db, "SELECT * FROM foo", 0, []any{"a", "b"})
-// }
+func TestCommit(t *testing.T) {
+	db := openDB(t)
+	mustExec(t, db, "CREATE TABLE bar (label TEXT)")
+	mustExec(t, db, "INSERT INTO bar VALUES ('a')")
+	tx, err := db.Begin()
+	require.NoError(t, err)
+	_, err = tx.Exec("INSERT INTO bar VALUES ('b')")
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit())
+	mustQueryColumn(t, db, "SELECT * FROM bar", 0, []any{"a", "b"})
+}
 
 // func TestRollback(t *testing.T) {
 // 	db := openDB(t)
