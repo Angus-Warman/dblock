@@ -56,6 +56,11 @@ func (d *Decoder) GetUint32() (uint32, error) {
 	return val, nil
 }
 
+func (d *Decoder) GetAsUint8() (int, error) {
+	v, err := d.GetUint8()
+	return int(v), err
+}
+
 func (d *Decoder) GetAsUint32() (int, error) {
 	v, err := d.GetUint32()
 	return int(v), err
@@ -114,7 +119,7 @@ func (d *Decoder) GetStringWithLength() (string, error) {
 }
 
 func (d *Decoder) GetShortStringWithLength() (string, error) {
-	n, err := d.GetAsUint16()
+	n, err := d.GetAsUint8()
 	if err != nil {
 		return "", err
 	}

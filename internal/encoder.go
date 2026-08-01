@@ -35,8 +35,17 @@ func (e *Encoder) PutUint16(val uint16) {
 	e.backing = LE.AppendUint16(e.backing, val)
 }
 
-const maxInt32 = 1<<31 - 1
+const maxInt8 = 1<<7 - 1
 const maxInt16 = 1<<15 - 1
+const maxInt32 = 1<<31 - 1
+
+func (e *Encoder) PutAsUint8(val int) {
+	if val > maxInt8 {
+		panic(fmt.Errorf("value %v cannot be stored as uint8", val))
+	}
+
+	e.PutUint8(uint8(val))
+}
 
 func (e *Encoder) PutAsUint16(val int) {
 	if val > maxInt16 {
@@ -93,7 +102,11 @@ func (e *Encoder) PutStringWithLength(s string) {
 }
 
 func (e *Encoder) PutShortStringWithLength(s string) {
-	e.PutAsUint16(len(s))
+	if len(s) > maxInt8 {
+		panic(fmt.Errorf("value %v cannot is longer than %v", s, maxInt8))
+	}
+
+	e.PutAsUint8(len(s))
 	e.PutBytes([]byte(s))
 }
 

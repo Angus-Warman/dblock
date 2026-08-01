@@ -121,15 +121,17 @@ func (e *Engine) lookupTable(name string) (*tableInfo, error) {
 			continue
 		}
 
-		columns, err := decodeTableDefinition(row.Values[2].([]byte))
+		td, err := DecodeTableDefinition(row.Values[2].([]byte))
 
 		if err != nil {
 			return nil, err
 		}
 
+		colNames := td.ColumnNames()
+
 		return &tableInfo{
 			rootPage: PageID(row.Values[3].(int64)),
-			columns:  columns,
+			columns:  colNames,
 		}, nil
 	}
 
@@ -173,6 +175,12 @@ func (e *Engine) ExecCreate(stmt *CreateStmt) error {
 	return e.CreateTable(def)
 }
 
+type SchemaObjectType string
+
+const (
+	TableObject SchemaObjectType = "TABLE"
+)
+
 func (e *Engine) CreateTable(def *TableDefinition) error {
 	if def == nil {
 		return fmt.Errorf("table definition is null")
@@ -190,41 +198,12 @@ func (e *Engine) CreateTable(def *TableDefinition) error {
 
 	rootpage := e.pager.NextID()
 
-	return e.SaveSchemaObject(def.name, "TABLE", encodeTableDefinition(def), rootpage)
+	return e.SaveSchemaObject(def.name, TableObject, def.Encode(), rootpage)
 }
 
-func encodeTableDefinition(def *TableDefinition) []byte {
-	names := make([]any, len(def.columns))
-	for i, col := range def.columns {
-		names[i] = col.name
-	}
-
-	row := Row{Values: names}
-	return row.Encode()
-}
-
-func decodeTableDefinition(buf []byte) ([]string, error) {
-	row, err := DecodeRow(buf)
-
-	if err != nil {
-		return nil, err
-	}
-
-	columns := make([]string, len(row.Values))
-	for i, v := range row.Values {
-		name, ok := v.(string)
-		if !ok {
-			return nil, fmt.Errorf("bad column definition %d: %v", i, v)
-		}
-		columns[i] = name
-	}
-
-	return columns, nil
-}
-
-func (e *Engine) SaveSchemaObject(objectName, objectType string, definition []byte, rootpage PageID) error {
+func (e *Engine) SaveSchemaObject(objectName string, objectType SchemaObjectType, definition []byte, rootpage PageID) error {
 	values := []any{
-		objectName, objectType, definition, int64(rootpage),
+		objectName, string(objectType), definition, int64(rootpage),
 	}
 
 	row := Row{Values: values}
