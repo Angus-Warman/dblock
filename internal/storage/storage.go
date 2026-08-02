@@ -66,6 +66,17 @@ func (s *TxStorage) Rollback() error {
 	return nil
 }
 
+// Close closes the underlying WAL storage.
+func (s *TxStorage) Close() error {
+	return s.wal.Close()
+}
+
+// NextBlockID returns the lowest block ID not used by any committed block,
+// for handing out new page IDs.
+func (s *TxStorage) NextBlockID() BlockID {
+	return s.wal.NextBlockID()
+}
+
 type WalStorage struct {
 	mu            sync.Mutex
 	walIndex      map[BlockID]WalID
@@ -144,6 +155,33 @@ func (w *WalStorage) forgetTx(id TxID) {
 	w.mu.Lock()
 	delete(w.txUsingWalIDs, id)
 	w.mu.Unlock()
+}
+
+// NextBlockID returns the lowest block ID not used by any committed block: the
+// highest block in the WAL index or main, plus one.
+func (w *WalStorage) NextBlockID() BlockID {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	max := BlockID(-1)
+	for id := range w.walIndex {
+		if id > max {
+			max = id
+		}
+	}
+
+	size, err := w.main.Size()
+	if err == nil {
+		if mainMax := BlockID(size/BlockSize) - 1; mainMax > max {
+			max = mainMax
+		}
+	}
+
+	if next := max + 1; next < 1 {
+		return 1 // RootSchemaPageID (0) is reserved
+	} else {
+		return next
+	}
 }
 
 // BlockID(8) + dbSizeAfter(8) + checksum(8).

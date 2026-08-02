@@ -1,9 +1,82 @@
 package internal
 
 import (
+	"dblock2/internal/storage"
+	"errors"
 	"fmt"
 	"sync"
 )
+
+type PagerSource struct {
+	wal *storage.WalStorage
+}
+
+func NewPagerSource(dsn string) (*PagerSource, error) {
+	wal, err := storage.OpenWalStorage(dsn)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &PagerSource{
+		wal: wal,
+	}, nil
+}
+
+func (s *PagerSource) Begin() *StoragePager {
+	tx := s.wal.NewTxStorage()
+	return &StoragePager{
+		store:  tx,
+		nextID: PageID(tx.NextBlockID()),
+	}
+}
+
+type StoragePager struct {
+	store  *storage.TxStorage
+	nextID PageID
+}
+
+var _ Pager = (*StoragePager)(nil)
+
+// GetPage implements [Pager].
+func (p *StoragePager) GetPage(id PageID) (*Page, error) {
+	buf, err := p.store.GetBlock(storage.BlockID(id))
+
+	if err != nil {
+		if errors.Is(err, storage.ErrEmptyBlock) {
+			return nil, ErrEmptyPage
+		}
+		return nil, err
+	}
+
+	return Decode(buf)
+}
+
+// PutPage implements [Pager].
+func (p *StoragePager) PutPage(id PageID, page *Page) error {
+	buf, err := page.Encode()
+
+	if err != nil {
+		return err
+	}
+
+	p.store.PutBlock(storage.BlockID(id), buf)
+	return nil
+}
+
+// NextID implements [Pager].
+func (p *StoragePager) NextID() PageID {
+	id := p.nextID
+	p.nextID++
+	return id
+}
+
+// Close implements [Pager].
+func (p *StoragePager) Close() error {
+	return p.store.Close()
+}
+
+// Remove all below
 
 type TxPager struct {
 	pager Pager
