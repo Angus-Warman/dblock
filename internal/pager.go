@@ -1,114 +1,93 @@
 package internal
 
 import (
-	"fmt"
-	"sync"
+	"dblock2/internal/storage"
+	"errors"
 )
 
 type Pager interface {
 	GetPage(PageID) (*Page, error)
 	PutPage(PageID, *Page) error
 	NextID() PageID
-	Commit() error
-	Rollback() error
 	Close() error
 }
 
-type MemoryPager struct {
-	pages     map[PageID][]byte
-	committed map[PageID][]byte
-	nextID    PageID
-	baseNext  PageID
+type PagerSource struct {
+	wal *storage.WalStorage
 }
 
-// NextID implements [Pager].
-func (m *MemoryPager) NextID() PageID {
-	id := m.nextID
-	m.nextID++
-	return id
-}
+func NewPagerSource(dsn string) (*PagerSource, error) {
+	wal, err := storage.OpenWalStorage(dsn)
 
-// PutPage implements [Pager].
-func (m *MemoryPager) PutPage(id PageID, page *Page) error {
-	data, err := page.Encode()
 	if err != nil {
-		return err
+		return nil, err
 	}
-	m.pages[id] = data
-	return nil
+
+	return &PagerSource{
+		wal: wal,
+	}, nil
+}
+
+func (s *PagerSource) Close() error {
+	return s.wal.Close()
+}
+
+func (s *PagerSource) Begin() *StoragePager {
+	tx := s.wal.NewTxStorage()
+	return &StoragePager{
+		store:  tx,
+		nextID: PageID(tx.NextBlockID()),
+	}
+}
+
+type StoragePager struct {
+	store  *storage.TxStorage
+	nextID PageID
 }
 
 // GetPage implements [Pager].
-func (m *MemoryPager) GetPage(id PageID) (*Page, error) {
-	data, ok := m.pages[id]
-	if !ok {
-		return nil, ErrEmptyPage
-	}
-	return Decode(data)
-}
+func (p *StoragePager) GetPage(id PageID) (*Page, error) {
+	buf, err := p.store.GetBlock(storage.BlockID(id))
 
-// Commit implements [Pager].
-func (m *MemoryPager) Commit() error {
-	m.committed = clonePages(m.pages)
-	m.baseNext = m.nextID
-	return nil
-}
-
-// Rollback implements [Pager].
-func (m *MemoryPager) Rollback() error {
-	m.pages = clonePages(m.committed)
-	m.nextID = m.baseNext
-	return nil
-}
-
-func clonePages(src map[PageID][]byte) map[PageID][]byte {
-	dst := make(map[PageID][]byte, len(src))
-	for id, data := range src {
-		dst[id] = append([]byte{}, data...)
-	}
-	return dst
-}
-
-var (
-	memDBsMu       sync.Mutex
-	globalMemPager *MemoryPager
-	memDBRefs      = 0
-)
-
-func NewPager(dsn string) (Pager, error) {
-	if dsn == ":memory:" {
-		memDBsMu.Lock()
-		defer memDBsMu.Unlock()
-
-		if globalMemPager == nil {
-			p := NewMemoryPager()
-			globalMemPager = p
+	if err != nil {
+		if errors.Is(err, storage.ErrEmptyBlock) {
+			return nil, ErrEmptyPage
 		}
-
-		memDBRefs++
-		return globalMemPager, nil
+		return nil, err
 	}
 
-	return nil, fmt.Errorf("WIP")
+	return Decode(buf)
 }
 
-func (p *MemoryPager) Close() error {
-	memDBsMu.Lock()
-	defer memDBsMu.Unlock()
+// PutPage implements [Pager].
+func (p *StoragePager) PutPage(id PageID, page *Page) error {
+	buf, err := page.Encode()
 
-	memDBRefs--
-	if memDBRefs > 0 {
-		return nil
+	if err != nil {
+		return err
 	}
 
-	globalMemPager = nil
+	p.store.PutBlock(storage.BlockID(id), buf)
 	return nil
 }
 
-func NewMemoryPager() *MemoryPager {
-	return &MemoryPager{
-		pages:     map[PageID][]byte{},
-		committed: map[PageID][]byte{},
-		nextID:    1, // RootSchemaPageID (0) is reserved
-	}
+// NextID implements [Pager].
+func (p *StoragePager) NextID() PageID {
+	id := p.nextID
+	p.nextID++
+	p.store.ReserveBlock(storage.BlockID(id))
+	return id
+}
+
+func (p *StoragePager) Commit() error {
+	return p.store.Commit()
+}
+
+func (p *StoragePager) Rollback() error {
+	return p.store.Rollback()
+}
+
+// Close implements [Pager].
+func (p *StoragePager) Close() error {
+	return p.store.Close()
 }

@@ -23,18 +23,32 @@ func mustExec(t *testing.T, db *sql.DB, query string, args ...any) {
 	require.NoError(t, err)
 }
 
+func mustExecTx(t *testing.T, tx *sql.Tx, query string, args ...any) {
+	t.Helper()
+	_, err := tx.Exec(query, args...)
+	require.NoError(t, err)
+}
+
 func mustQueryOne(t *testing.T, db *sql.DB, query string, expectedRow []any) {
 	t.Helper()
 	rows, err := db.Query(query)
 	require.NoError(t, err)
 	rowVals := getRows(t, rows)
-	require.GreaterOrEqual(t, 1, len(rowVals))
+	require.Len(t, rowVals, 1)
 	require.Equal(t, expectedRow, rowVals[0])
 }
 
 func mustQueryColumn(t *testing.T, db *sql.DB, query string, colIdx int, expectedCol []any) {
 	t.Helper()
 	rows, err := db.Query(query)
+	require.NoError(t, err)
+	colVals := getColumn(t, rows, colIdx)
+	require.Equal(t, expectedCol, colVals)
+}
+
+func mustQueryColumnTx(t *testing.T, tx *sql.Tx, query string, colIdx int, expectedCol []any) {
+	t.Helper()
+	rows, err := tx.Query(query)
 	require.NoError(t, err)
 	colVals := getColumn(t, rows, colIdx)
 	require.Equal(t, expectedCol, colVals)
@@ -48,6 +62,7 @@ func getColumn(t *testing.T, rows *sql.Rows, colIdx int) []any {
 	colValues := []any{}
 
 	for rowIdx := range rowValues {
+		require.Less(t, colIdx, len(rowValues[rowIdx]))
 		colValues = append(colValues, rowValues[rowIdx][colIdx])
 	}
 
@@ -60,6 +75,8 @@ func getRows(t *testing.T, rows *sql.Rows) [][]any {
 	colNames, err := rows.Columns()
 	require.NoError(t, err)
 	rowValues := [][]any{}
+
+	defer rows.Close()
 
 	for rows.Next() {
 		require.NoError(t, rows.Err())

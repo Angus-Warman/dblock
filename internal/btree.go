@@ -50,7 +50,7 @@ func (t *Tree) loadPage(id PageID) (*Page, error) {
 	// 	return nil, fmt.Errorf("btree: load page %d: has %v keys but %v values", id, len(page.Keys), len(page.Values))
 	// }
 
-	// page.ID = id
+	page.ID = id
 
 	return page, nil
 }
@@ -365,21 +365,16 @@ func (t *Tree) LastKey() ([]byte, error) {
 }
 
 func (t *Tree) NextIntegerKey() (RowID, error) {
-	lastKey, err := t.LastKey()
+	buf, err := t.LastKey()
 
 	if err != nil {
 		return 0, err
 	}
 
-	lastIntKey, err := NewDecoder(lastKey).GetInt64()
+	lastKey := DecodeKey(buf)
+	next := lastKey + 1
 
-	if err != nil {
-		return 0, err
-	}
-
-	next := lastIntKey + 1
-
-	return RowID(next), nil
+	return next, nil
 }
 
 func EncodeKey(id RowID) []byte {

@@ -86,7 +86,7 @@ func (e *Engine) SelectAllFromTable(tableName string) (Scanner, error) {
 	info, err := e.lookupTable(tableName)
 
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("SelectAllFromTable: %w", err)
 	}
 
 	tree := NewBtree(e.pager, info.rootPage)
