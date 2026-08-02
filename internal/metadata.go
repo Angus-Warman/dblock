@@ -7,8 +7,8 @@ type Metadata struct {
 	DatabaseVersion     uint16 // 6-7, 1
 	PageSizePower       uint8  // 8, PageSize = 2 ^ PageSizePower, default 13 = 8192
 	NumberOfPages       uint32 // 9-12
-	FileChangeCounter   uint32 // 13-16, increases every time the file is changed
-	SchemaChangeCounter uint32 // 17-20, increases every time dblock_schema is changed
+	FileChangeCounter   uint32 // 13-16, increments every time the file is changed
+	SchemaChangeCounter uint32 // 17-20, increments every time dblock_schema is changed
 	TokenValue          uint32 // 21-24
 }
 
