@@ -1,10 +1,21 @@
 package tests
 
 import (
+	"database/sql"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
+
+func beginTx(t *testing.T, db *sql.DB) *sql.Tx {
+	t.Helper()
+	tx, err := db.Begin()
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		tx.Rollback()
+	})
+	return tx
+}
 
 func TestSharedInMemory(t *testing.T) {
 	db1 := openDB(t)
@@ -25,8 +36,7 @@ func TestSharedInMemoryAfterClose(t *testing.T) {
 func TestReadDuringTransaction(t *testing.T) {
 	db := openDB(t)
 	mustExec(t, db, "CREATE TABLE foo (label TEXT)")
-	tx, err := db.Begin()
-	require.NoError(t, err)
+	tx := beginTx(t, db)
 	mustExecTx(t, tx, "INSERT INTO foo VALUES ('a')")
 	rows, err := tx.Query("SELECT * FROM foo")
 	require.NoError(t, err)
@@ -50,9 +60,8 @@ func TestRollback(t *testing.T) {
 	db := openDB(t)
 	mustExec(t, db, "CREATE TABLE foo (label TEXT)")
 	mustExec(t, db, "INSERT INTO foo VALUES ('a')")
-	tx, err := db.Begin()
-	require.NoError(t, err)
-	_, err = tx.Exec("INSERT INTO foo VALUES ('b')")
+	tx := beginTx(t, db)
+	_, err := tx.Exec("INSERT INTO foo VALUES ('b')")
 	require.NoError(t, err)
 	require.NoError(t, tx.Rollback())
 	mustQueryColumn(t, db, "SELECT * FROM foo", 0, []any{"a"})
@@ -62,9 +71,8 @@ func TestIsolation(t *testing.T) {
 	db := openDB(t)
 	mustExec(t, db, "CREATE TABLE foo (label TEXT)")
 	mustExec(t, db, "INSERT INTO foo VALUES ('a')")
-	tx, err := db.Begin()
-	require.NoError(t, err)
-	_, err = tx.Exec("INSERT INTO foo VALUES ('b')")
+	tx := beginTx(t, db)
+	_, err := tx.Exec("INSERT INTO foo VALUES ('b')")
 	require.NoError(t, err)
 
 	// DB only sees first
@@ -76,3 +84,17 @@ func TestIsolation(t *testing.T) {
 	col := getColumn(t, rows, 0)
 	require.Equal(t, []any{"a", "b"}, col)
 }
+
+// func TestReadIsolation(t *testing.T) {
+// 	db := openDB(t)
+// 	mustExec(t, db, "CREATE TABLE foo (label TEXT)")
+// 	mustExec(t, db, "INSERT INTO foo VALUES ('a')")
+// 	tx := beginTx(t, db)
+
+// 	// While transaction is started, another row is added
+// 	mustExec(t, db, "INSERT INTO foo VALUES ('b')")
+
+// 	mustQueryColumn(t, db, "SELECT * FROM foo", 0, []any{"a", "b"})
+
+// 	mustQueryColumnTx(t, tx, "SELECT * FROM foo", 0, []any{"a"})
+// }

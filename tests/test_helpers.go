@@ -46,6 +46,14 @@ func mustQueryColumn(t *testing.T, db *sql.DB, query string, colIdx int, expecte
 	require.Equal(t, expectedCol, colVals)
 }
 
+func mustQueryColumnTx(t *testing.T, tx *sql.Tx, query string, colIdx int, expectedCol []any) {
+	t.Helper()
+	rows, err := tx.Query(query)
+	require.NoError(t, err)
+	colVals := getColumn(t, rows, colIdx)
+	require.Equal(t, expectedCol, colVals)
+}
+
 func getColumn(t *testing.T, rows *sql.Rows, colIdx int) []any {
 	t.Helper()
 
