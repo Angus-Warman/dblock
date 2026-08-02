@@ -89,7 +89,7 @@ func (s *WalStorage) Close() error {
 
 func OpenWalStorage(dsn string) (*WalStorage, error) {
 	if dsn == ":memory:" {
-		return NewWalPager(
+		return NewWalStorage(
 			OpenInMemoryFile("memory-main"),
 			OpenInMemoryFile("memory-wal"),
 		), nil
@@ -110,10 +110,10 @@ func OpenWalStorage(dsn string) (*WalStorage, error) {
 		return nil, err
 	}
 
-	return NewWalPager(main, wal), nil
+	return NewWalStorage(main, wal), nil
 }
 
-func NewWalPager(main StorageFile, wal StorageFile) *WalStorage {
+func NewWalStorage(main StorageFile, wal StorageFile) *WalStorage {
 	return &WalStorage{
 		walIndex:      make(map[BlockID]WalID),
 		walOffsets:    make(map[WalID]BlockOffset),
@@ -124,7 +124,7 @@ func NewWalPager(main StorageFile, wal StorageFile) *WalStorage {
 	}
 }
 
-func (w *WalStorage) NewTxPager() *TxStorage {
+func (w *WalStorage) NewTxStorage() *TxStorage {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 

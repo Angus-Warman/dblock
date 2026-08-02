@@ -17,7 +17,7 @@ func newTestWal(t *testing.T) (*WalStorage, *InMemoryFile) {
 	t.Helper()
 	main := OpenInMemoryFile(t.Name() + "-main")
 	wal := OpenInMemoryFile(t.Name() + "-wal")
-	return NewWalPager(main, wal), main
+	return NewWalStorage(main, wal), main
 }
 
 func seedBlock(t *testing.T, main StorageFile, id BlockID, data []byte) {
@@ -39,7 +39,7 @@ func TestWalStorageCommitVisibleToNewTx(t *testing.T) {
 
 	seedBlock(t, main, 0, testBlock(0xAA))
 
-	txA := pager.NewTxPager()
+	txA := pager.NewTxStorage()
 	got, err := txA.GetBlock(0)
 	require.NoError(t, err)
 	require.Equal(t, testBlock(0xAA), got)
@@ -47,7 +47,7 @@ func TestWalStorageCommitVisibleToNewTx(t *testing.T) {
 	txA.PutBlock(0, testBlock(0xBB))
 	require.NoError(t, txA.Commit())
 
-	txB := pager.NewTxPager()
+	txB := pager.NewTxStorage()
 	got, err = txB.GetBlock(0)
 	require.NoError(t, err)
 	require.Equal(t, testBlock(0xBB), got)
@@ -61,8 +61,8 @@ func TestTwoTxStoragesAreIsolated(t *testing.T) {
 
 	seedBlock(t, main, 0, testBlock(0xAA))
 
-	txA := pager.NewTxPager()
-	txB := pager.NewTxPager()
+	txA := pager.NewTxStorage()
+	txB := pager.NewTxStorage()
 
 	// Both see the same snapshot before anything is written.
 	for _, tx := range []*TxStorage{txA, txB} {
@@ -84,7 +84,7 @@ func TestTwoTxStoragesAreIsolated(t *testing.T) {
 	txB.PutBlock(0, testBlock(0xCC))
 	require.NoError(t, txB.Commit())
 
-	txC := pager.NewTxPager()
+	txC := pager.NewTxStorage()
 	got, err = txC.GetBlock(0)
 	require.NoError(t, err)
 	require.Equal(t, testBlock(0xCC), got)
@@ -97,12 +97,12 @@ func TestTxStorageDoesNotSeeNewBlocks(t *testing.T) {
 
 	seedBlock(t, main, 0, testBlock(0xAA))
 
-	txA := pager.NewTxPager()
+	txA := pager.NewTxStorage()
 	_, err := txA.GetBlock(1)
 	require.ErrorIs(t, err, ErrEmptyBlock)
 
 	// Another TxStorage grows the database past txA's snapshot.
-	txB := pager.NewTxPager()
+	txB := pager.NewTxStorage()
 	txB.PutBlock(1, testBlock(0xBB))
 	require.NoError(t, txB.Commit())
 
@@ -119,8 +119,8 @@ func TestCheckpointPreservesSnapshots(t *testing.T) {
 
 	seedBlock(t, main, 0, testBlock(0xAA))
 
-	txA := pager.NewTxPager()
-	txB := pager.NewTxPager()
+	txA := pager.NewTxStorage()
+	txB := pager.NewTxStorage()
 
 	// txB commits a new version of block 0 while txA is still active.
 	txB.PutBlock(0, testBlock(0xBB))
@@ -139,7 +139,7 @@ func TestCheckpointPreservesSnapshots(t *testing.T) {
 	require.NoError(t, txA.Commit())
 	require.NoError(t, pager.Checkpoint())
 
-	txC := pager.NewTxPager()
+	txC := pager.NewTxStorage()
 	got, err = txC.GetBlock(0)
 	require.NoError(t, err)
 	require.Equal(t, testBlock(0xBB), got)
