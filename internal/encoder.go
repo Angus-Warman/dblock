@@ -114,8 +114,14 @@ func (e *Encoder) Len() int {
 	return len(e.backing)
 }
 
-func (e *Encoder) Pad(length int) {
-	e.backing = append(e.backing, make([]byte, length)...)
+func (e *Encoder) Pad(toLength int) {
+	required := toLength - e.Len()
+
+	if required < 1 {
+		return
+	}
+
+	e.backing = append(e.backing, make([]byte, required)...)
 }
 
 func (e *Encoder) Bytes() []byte {

@@ -14,7 +14,6 @@ type PageID int64
 type RowID int64
 
 const RootSchemaPageID PageID = 0
-const MetadataLength = 100
 
 var dblockMagic = []byte("dblock")
 
