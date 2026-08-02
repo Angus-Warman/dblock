@@ -44,3 +44,40 @@ func TestStoragePagerRoundTrip(t *testing.T) {
 
 	require.NoError(t, pager.Close())
 }
+
+func TestPagerMetadataRoundTrip(t *testing.T) {
+	src := &PagerSource{wal: newTestWal(t)}
+	pager := src.Begin()
+
+	// A fresh database reports default metadata.
+	m, err := pager.GetMetadata()
+	require.NoError(t, err)
+	require.Equal(t, NewMetadata(), m)
+
+	// Writing the root schema page must not clobber the metadata.
+	leaf := &Page{
+		ID:      RootSchemaPageID,
+		IsLeaf:  true,
+		NumKeys: 1,
+		Keys:    [][]byte{[]byte("k")},
+		Values:  [][]byte{[]byte("v")},
+	}
+	require.NoError(t, pager.PutPage(RootSchemaPageID, leaf))
+
+	// Updating the metadata must not clobber the root page's data.
+	m.SchemaChangeCounter = 7
+	m.FileChangeCounter = 3
+	require.NoError(t, pager.PutMetadata(m))
+
+	got, err := pager.GetMetadata()
+	require.NoError(t, err)
+	require.Equal(t, m, got)
+
+	page, err := pager.GetPage(RootSchemaPageID)
+	require.NoError(t, err)
+	require.Equal(t, leaf.Keys, page.Keys)
+	require.Equal(t, leaf.Values, page.Values)
+
+	require.NoError(t, pager.Commit())
+	require.NoError(t, pager.Close())
+}

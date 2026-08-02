@@ -44,7 +44,7 @@ func TestMetadata(t *testing.T) {
 	require.Equal(t, uint16(1), m.DatabaseVersion)
 	require.Equal(t, uint8(13), m.PageSizePower)
 	require.Equal(t, uint32(0), m.NumberOfPages)
-	require.Equal(t, uint32(0), m.FileChangeCounter)
+	require.Equal(t, uint32(1), m.FileChangeCounter)
 	require.Equal(t, uint32(1), m.SchemaChangeCounter)
 	require.Equal(t, uint32(0), m.TokenValue)
 

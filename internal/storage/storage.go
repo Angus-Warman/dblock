@@ -1,11 +1,23 @@
 package storage
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"hash/crc32"
 	"sync"
+)
+
+var dblockMagic = []byte("dblock")
+
+// The first block of a database file reserves metadataLength bytes for
+// database metadata. Its file-change counter is a little-endian uint32 at
+// fileChangeCounterOffset; it increments every time pages move from the WAL
+// into main.
+const (
+	metadataLength          = 100
+	fileChangeCounterOffset = 13
 )
 
 type BlockID int64
@@ -327,6 +339,14 @@ func (p *WalStorage) Checkpoint() error {
 		}
 	}
 
+	// 0. Moving pages from the WAL into main changes the database file, which
+	// is recorded by bumping block 0's metadata file-change counter.
+	if pagesMoveToMain(p.walIndex, gate) {
+		if err := p.bumpFileChangeCounter(); err != nil {
+			return fmt.Errorf("Checkpoint: %w", err)
+		}
+	}
+
 	// 1. Copy every safe frame into main.
 	for id, walID := range p.walIndex {
 		if walID >= gate {
@@ -390,5 +410,80 @@ func (p *WalStorage) Checkpoint() error {
 	p.walIndex = newIndex
 	p.walOffsets = newOffsets
 	p.walEnd = offset
+	return nil
+}
+
+// pagesMoveToMain reports whether any committed frame will be copied from the
+// WAL into main during this checkpoint.
+func pagesMoveToMain(walIndex map[BlockID]WalID, gate WalID) bool {
+	for _, walID := range walIndex {
+		if walID < gate {
+			return true
+		}
+	}
+	return false
+}
+
+// bumpFileChangeCounter increments the file-change counter in block 0's
+// metadata. The updated block is written back into the WAL frame (or main, if
+// block 0 is not in the WAL) so every copy made below stays consistent. Blocks
+// that do not carry the dblock magic are left untouched.
+func (p *WalStorage) bumpFileChangeCounter() error {
+	var buf []byte
+
+	if walID, ok := p.walIndex[0]; ok {
+		buf = make([]byte, BlockSize)
+		if _, err := p.wal.ReadAt(buf, int64(p.walOffsets[walID]+frameHeaderSize)); err != nil {
+			return err
+		}
+	} else {
+		size, err := p.main.Size()
+
+		if err != nil {
+			return err
+		}
+
+		if size < BlockSize {
+			return nil // block 0 does not exist yet
+		}
+
+		buf = make([]byte, BlockSize)
+		if _, err := p.main.ReadAt(buf, 0); err != nil {
+			return err
+		}
+	}
+
+	if !bytes.Equal(buf[:len(dblockMagic)], dblockMagic) {
+		return nil
+	}
+
+	counter := binary.LittleEndian.Uint32(buf[fileChangeCounterOffset:]) + 1
+	binary.LittleEndian.PutUint32(buf[fileChangeCounterOffset:], counter)
+
+	if walID, ok := p.walIndex[0]; ok {
+		return p.writeFrame(0, buf, p.walOffsets[walID])
+	}
+
+	_, err := p.main.WriteAt(buf, 0)
+	return err
+}
+
+// writeFrame rewrites the WAL frame at offset with the given block buffer,
+// preserving the frame's dbSizeAfter/commit-marker bytes and fixing its
+// checksum.
+func (p *WalStorage) writeFrame(id BlockID, buf []byte, offset BlockOffset) error {
+	header := make([]byte, frameHeaderSize)
+	if _, err := p.wal.ReadAt(header, int64(offset)); err != nil {
+		return err
+	}
+	binary.BigEndian.PutUint64(header[0:8], uint64(id))
+	binary.BigEndian.PutUint64(header[16:24], uint64(crc32.ChecksumIEEE(buf)))
+
+	if _, err := p.wal.WriteAt(header, int64(offset)); err != nil {
+		return err
+	}
+	if _, err := p.wal.WriteAt(buf, int64(offset+frameHeaderSize)); err != nil {
+		return err
+	}
 	return nil
 }
