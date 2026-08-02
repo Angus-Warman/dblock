@@ -3,13 +3,13 @@ package internal
 import "fmt"
 
 type Metadata struct {
-	Dblock              string
-	DatabaseVersion     uint16 // 1
-	PageSizePower       uint8  // PageSize = 2 ^ PageSizePower, default 13 = 8192
-	NumberOfPages       uint32
-	FileChangeCounter   uint32 // Increases every time the file is changed
-	SchemaChangeCounter uint32 // Increases every time dblock_schema is changed
-	TokenValue          uint32
+	Dblock              string // 0-5
+	DatabaseVersion     uint16 // 6-7, 1
+	PageSizePower       uint8  // 8, PageSize = 2 ^ PageSizePower, default 13 = 8192
+	NumberOfPages       uint32 // 9-12
+	FileChangeCounter   uint32 // 13-16, increases every time the file is changed
+	SchemaChangeCounter uint32 // 17-20, increases every time dblock_schema is changed
+	TokenValue          uint32 // 21-24
 }
 
 const headerMagic = "dblock"

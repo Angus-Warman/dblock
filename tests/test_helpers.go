@@ -2,6 +2,9 @@ package tests
 
 import (
 	"database/sql"
+	"encoding/binary"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -93,4 +96,45 @@ func getRows(t *testing.T, rows *sql.Rows) [][]any {
 	}
 
 	return rowValues
+}
+
+func beginTx(t *testing.T, db *sql.DB) *sql.Tx {
+	t.Helper()
+	tx, err := db.Begin()
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		tx.Rollback()
+	})
+	return tx
+}
+
+func openFileDB(t *testing.T) (*sql.DB, string) {
+	t.Helper()
+	fp := filepath.Join(t.TempDir(), t.Name())
+	db, err := sql.Open("dblock", fp)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, db.Close())
+	})
+	return db, fp
+}
+
+func reopenFileDB(t *testing.T, fp string) *sql.DB {
+	t.Helper()
+	db, err := sql.Open("dblock", fp)
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, db.Close())
+	})
+	return db
+}
+
+func getMetadataValue(t *testing.T, fp string, offset int) uint32 {
+	t.Helper()
+	f, err := os.Open(fp)
+	require.NoError(t, err)
+	buf := make([]byte, 4)
+	f.ReadAt(buf, int64(offset))
+	value := binary.LittleEndian.Uint32(buf)
+	return value
 }

@@ -1,21 +1,10 @@
 package tests
 
 import (
-	"database/sql"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
-
-func beginTx(t *testing.T, db *sql.DB) *sql.Tx {
-	t.Helper()
-	tx, err := db.Begin()
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		tx.Rollback()
-	})
-	return tx
-}
 
 func TestSharedInMemoryAfterClose(t *testing.T) {
 	db1 := openDB(t)
