@@ -1,8 +1,10 @@
 package storage
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
+	"hash/crc32"
 	"sync"
 )
 
@@ -17,51 +19,50 @@ type TxStorage struct {
 	id          TxID
 	wal         *WalStorage
 	maxWalBlock WalID // at time of open
-	dirtyBlocks []Block
+	dirtyBlocks map[BlockID]Block
 }
 
 // GetBlock returns either the committed block from main, or the WAL block that existed when TxStorage first opened
 func (s *TxStorage) GetBlock(id BlockID) ([]byte, error) {
+	exists, ok := s.dirtyBlocks[id]
+
+	if ok {
+		return exists.Buf, nil
+	}
+
 	return s.wal.GetBlock(id, s.maxWalBlock)
 }
 
 func (s *TxStorage) PutBlock(id BlockID, buf []byte) {
-	idx := -1
-
 	block := Block{
 		ID:  id,
 		Buf: buf,
 	}
 
-	for i, block := range s.dirtyBlocks {
-		if block.ID == id {
-			idx = i
-			break
-		}
-	}
-
-	if idx == -1 {
-		s.dirtyBlocks[idx] = block
-		return
-	}
-
-	s.dirtyBlocks = append(s.dirtyBlocks, block)
+	s.dirtyBlocks[id] = block
 }
 
 func (s *TxStorage) Commit() error {
-	err := s.wal.PutBlocks(s.dirtyBlocks)
+	blocks := []Block{}
+
+	for _, block := range s.dirtyBlocks {
+		blocks = append(blocks, block)
+	}
+
+	err := s.wal.PutBlocks(blocks)
 
 	if err != nil {
 		return err
 	}
 
-	s.dirtyBlocks = []Block{}
-	// Should delete itself
+	s.dirtyBlocks = make(map[BlockID]Block)
+	s.wal.forgetTx(s.id)
 	return nil
 }
 
 func (s *TxStorage) Rollback() error {
-	// Should delete itself
+	s.dirtyBlocks = make(map[BlockID]Block)
+	s.wal.forgetTx(s.id)
 	return nil
 }
 
@@ -73,6 +74,8 @@ type WalStorage struct {
 	main          StorageFile
 	wal           StorageFile
 	maxWalID      WalID
+	nextTxID      TxID
+	walEnd        BlockOffset
 }
 
 func (s *WalStorage) Close() error {
@@ -122,14 +125,31 @@ func NewWalPager(main StorageFile, wal StorageFile) *WalStorage {
 }
 
 func (w *WalStorage) NewTxPager() *TxStorage {
-	return &TxStorage{
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	tx := &TxStorage{
+		id:          w.nextTxID,
 		wal:         w,
 		maxWalBlock: w.maxWalID,
+		dirtyBlocks: make(map[BlockID]Block),
 	}
+	w.nextTxID++
+	w.txUsingWalIDs[tx.id] = tx.maxWalBlock
+
+	return tx
+}
+
+func (w *WalStorage) forgetTx(id TxID) {
+	w.mu.Lock()
+	delete(w.txUsingWalIDs, id)
+	w.mu.Unlock()
 }
 
 // BlockID(8) + dbSizeAfter(8) + checksum(8).
 const frameHeaderSize = 24
+
+const frameSize = frameHeaderSize + BlockSize
 
 func pageOffset(id BlockID) (BlockOffset, BlockOffset) {
 	start := id * BlockSize
@@ -138,14 +158,18 @@ func pageOffset(id BlockID) (BlockOffset, BlockOffset) {
 
 var ErrEmptyBlock = errors.New("empty block")
 
+// GetBlock reads the block with the given id as of the snapshot watermark
+// toMax: the block's committed WAL version is visible only if its WalID is
+// strictly less than toMax, otherwise the pre-transaction version in main wins.
 func (p *WalStorage) GetBlock(id BlockID, toMax WalID) ([]byte, error) {
 	p.mu.Lock()
-	walID, inWAL := p.walIndex[id]
-	p.mu.Unlock()
+	defer p.mu.Unlock()
 
-	if inWAL && walID <= toMax {
+	walID, inWAL := p.walIndex[id]
+
+	if inWAL && walID < toMax {
 		buf := make([]byte, BlockSize)
-		if _, err := p.wal.ReadAt(buf, int64(walID+frameHeaderSize)); err != nil {
+		if _, err := p.wal.ReadAt(buf, int64(p.walOffsets[walID]+frameHeaderSize)); err != nil {
 			return nil, fmt.Errorf("GetPage: %w", err)
 		}
 		return buf, nil
@@ -178,12 +202,142 @@ type Block struct {
 	Buf []byte
 }
 
-// Writes to WAL
+// PutBlocks appends the given blocks to the WAL as a single atomic commit and
+// publishes them to the in-memory index. Only the last frame carries a commit
+// marker, so a future recovery pass can discard a torn commit.
 func (p *WalStorage) PutBlocks(blocks []Block) error {
-	return fmt.Errorf("WIP")
+	if len(blocks) == 0 {
+		return nil
+	}
+
+	for _, block := range blocks {
+		if len(block.Buf) != BlockSize {
+			return fmt.Errorf("PutBlocks: block %d has size %d, want %d", block.ID, len(block.Buf), BlockSize)
+		}
+	}
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	header := make([]byte, frameHeaderSize)
+	offset := p.walEnd
+
+	for i, block := range blocks {
+		walID := p.maxWalID
+		p.maxWalID++
+
+		// Header: BlockID(8) + dbSizeAfter(8) + checksum(8).
+		binary.BigEndian.PutUint64(header[0:8], uint64(block.ID))
+		if i == len(blocks)-1 {
+			binary.BigEndian.PutUint64(header[8:16], 1) // commit marker
+		}
+		binary.BigEndian.PutUint64(header[16:24], uint64(crc32.ChecksumIEEE(block.Buf)))
+
+		if _, err := p.wal.WriteAt(header, int64(offset)); err != nil {
+			return fmt.Errorf("PutBlocks: %w", err)
+		}
+		if _, err := p.wal.WriteAt(block.Buf, int64(offset+frameHeaderSize)); err != nil {
+			return fmt.Errorf("PutBlocks: %w", err)
+		}
+
+		p.walIndex[block.ID] = walID
+		p.walOffsets[walID] = offset
+		offset += frameSize
+	}
+
+	if err := p.wal.Sync(); err != nil {
+		return fmt.Errorf("PutBlocks: %w", err)
+	}
+
+	p.walEnd = offset
+	return nil
 }
 
-// Copies all blocks that are not required by active TxStorage from WAL to Main
+// Checkpoint copies committed WAL frames that no active TxStorage depends on
+// into main, fsyncs main, then rewrites the WAL keeping only the frames that
+// active transactions still need for their snapshot.
 func (p *WalStorage) Checkpoint() error {
-	return fmt.Errorf("WIP")
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if len(p.walIndex) == 0 {
+		return nil
+	}
+
+	// A TxStorage with snapshot watermark w reads block b from the WAL when
+	// walIndex[b] < w and from main otherwise. Copying b's frame into main only
+	// preserves those reads when every active TxStorage has w > walIndex[b], so
+	// the smallest watermark gates how far checkpointing can go. With no active
+	// transactions the gate is +inf and everything can be reclaimed.
+	gate := p.maxWalID
+	for _, w := range p.txUsingWalIDs {
+		if w < gate {
+			gate = w
+		}
+	}
+
+	// 1. Copy every safe frame into main.
+	for id, walID := range p.walIndex {
+		if walID >= gate {
+			continue // an active TxStorage still needs this version
+		}
+		buf := make([]byte, BlockSize)
+		if _, err := p.wal.ReadAt(buf, int64(p.walOffsets[walID]+frameHeaderSize)); err != nil {
+			return fmt.Errorf("Checkpoint: %w", err)
+		}
+		start, _ := pageOffset(id)
+		if _, err := p.main.WriteAt(buf, int64(start)); err != nil {
+			return fmt.Errorf("Checkpoint: %w", err)
+		}
+	}
+
+	// 2. main must be durable before the WAL is touched at all.
+	if err := p.main.Sync(); err != nil {
+		return fmt.Errorf("Checkpoint: %w", err)
+	}
+
+	// 3. Rewrite the WAL with only the frames that are still required, buffered
+	// first so the rewrite never clobbers a frame that hasn't been read yet.
+	type keptFrame struct {
+		id    BlockID
+		walID WalID
+		buf   []byte
+	}
+
+	var kept []keptFrame
+	for id, walID := range p.walIndex {
+		if walID < gate {
+			continue
+		}
+		buf := make([]byte, frameSize)
+		if _, err := p.wal.ReadAt(buf, int64(p.walOffsets[walID])); err != nil {
+			return fmt.Errorf("Checkpoint: %w", err)
+		}
+		kept = append(kept, keptFrame{id: id, walID: walID, buf: buf})
+	}
+
+	newIndex := make(map[BlockID]WalID, len(kept))
+	newOffsets := make(map[WalID]BlockOffset, len(kept))
+	offset := BlockOffset(0)
+
+	for _, kf := range kept {
+		if _, err := p.wal.WriteAt(kf.buf, int64(offset)); err != nil {
+			return fmt.Errorf("Checkpoint: %w", err)
+		}
+		newIndex[kf.id] = kf.walID
+		newOffsets[kf.walID] = offset
+		offset += frameSize
+	}
+
+	if err := p.wal.Truncate(int64(offset)); err != nil {
+		return fmt.Errorf("Checkpoint: %w", err)
+	}
+	if err := p.wal.Sync(); err != nil {
+		return fmt.Errorf("Checkpoint: %w", err)
+	}
+
+	p.walIndex = newIndex
+	p.walOffsets = newOffsets
+	p.walEnd = offset
+	return nil
 }

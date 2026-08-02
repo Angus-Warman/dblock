@@ -110,3 +110,37 @@ func TestTxStorageDoesNotSeeNewBlocks(t *testing.T) {
 	_, err = txA.GetBlock(1)
 	require.ErrorIs(t, err, ErrEmptyBlock)
 }
+
+// Checkpoint must not break an active TxStorage's snapshot, and once the
+// active TxStorage is gone it must move the new version into main.
+func TestCheckpointPreservesSnapshots(t *testing.T) {
+	pager, main := newTestWal(t)
+	defer pager.Close()
+
+	seedBlock(t, main, 0, testBlock(0xAA))
+
+	txA := pager.NewTxPager()
+	txB := pager.NewTxPager()
+
+	// txB commits a new version of block 0 while txA is still active.
+	txB.PutBlock(0, testBlock(0xBB))
+	require.NoError(t, txB.Commit())
+
+	// Checkpoint must not copy the new version into main, or txA's snapshot
+	// would change.
+	require.NoError(t, pager.Checkpoint())
+
+	got, err := txA.GetBlock(0)
+	require.NoError(t, err)
+	require.Equal(t, testBlock(0xAA), got)
+
+	// Once txA is done, checkpointing reclaims the WAL and txC sees the new
+	// version from main.
+	require.NoError(t, txA.Commit())
+	require.NoError(t, pager.Checkpoint())
+
+	txC := pager.NewTxPager()
+	got, err = txC.GetBlock(0)
+	require.NoError(t, err)
+	require.Equal(t, testBlock(0xBB), got)
+}
