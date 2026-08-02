@@ -227,5 +227,23 @@ func (e *Engine) SaveSchemaObject(objectName string, objectType SchemaObjectType
 	encodedRow := row.Encode()
 	rootTree := NewBtree(e.pager, RootSchemaPageID)
 	_, err := rootTree.InsertNext(encodedRow)
-	return err
+
+	if err != nil {
+		return err
+	}
+
+	return e.bumpSchemaVersion()
+}
+
+// bumpSchemaVersion records that dblock_schema changed.
+func (e *Engine) bumpSchemaVersion() error {
+	m, err := e.pager.GetMetadata()
+
+	if err != nil {
+		return err
+	}
+
+	m.SchemaChangeCounter++
+
+	return e.pager.PutMetadata(m)
 }

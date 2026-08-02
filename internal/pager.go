@@ -3,12 +3,13 @@ package internal
 import (
 	"dblock2/internal/storage"
 	"errors"
-	"fmt"
 )
 
 type Pager interface {
 	GetPage(PageID) (*Page, error)
 	PutPage(PageID, *Page) error
+	GetMetadata() (*Metadata, error)
+	PutMetadata(*Metadata) error
 	NextID() PageID
 	Close() error
 }
@@ -81,7 +82,21 @@ func (p *StoragePager) GetMetadata() (*Metadata, error) {
 }
 
 func (p *StoragePager) PutMetadata(m *Metadata) error {
-	return fmt.Errorf("WIP")
+	buf, err := p.store.GetBlock(storage.BlockID(RootSchemaPageID))
+
+	if err != nil {
+		if !errors.Is(err, storage.ErrEmptyBlock) {
+			return err
+		}
+
+		// No root page yet: write the metadata ahead of an empty page region.
+		buf = make([]byte, PageSize-MetadataLength)
+	} else {
+		_, buf = splitHeaderPageData(buf)
+	}
+
+	p.store.PutBlock(storage.BlockID(RootSchemaPageID), joinHeaderPageData(m, buf))
+	return nil
 }
 
 // PutPage implements [Pager].
@@ -92,9 +107,16 @@ func (p *StoragePager) PutPage(id PageID, page *Page) error {
 		return err
 	}
 
-	// The root schema page shares its block with the database metadata.
+	// The root schema page shares its block with the database metadata, which
+	// must survive the page being rewritten.
 	if id == RootSchemaPageID {
-		buf = joinHeaderPageData(buf)
+		m, err := p.GetMetadata()
+
+		if err != nil {
+			return err
+		}
+
+		buf = joinHeaderPageData(m, buf)
 	}
 
 	p.store.PutBlock(storage.BlockID(id), buf)

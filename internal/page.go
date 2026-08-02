@@ -15,18 +15,16 @@ type RowID int64
 
 const RootSchemaPageID PageID = 0
 
-var dblockMagic = []byte("dblock")
-
-func encodeMetadata() []byte {
-	metadata := make([]byte, MetadataLength)
-	copy(metadata, dblockMagic)
-	return metadata
-}
-
-func joinHeaderPageData(data []byte) []byte {
-	result := make([]byte, MetadataLength+len(data))
-	copy(result, encodeMetadata())
-	copy(result[MetadataLength:], data)
+// joinHeaderPageData prepends the encoded database metadata to a page's data,
+// producing the full first block as stored on disk.
+func joinHeaderPageData(m *Metadata, data []byte) []byte {
+	if m == nil {
+		m = NewMetadata()
+	}
+	metadata := m.Encode()
+	result := make([]byte, len(metadata)+len(data))
+	copy(result, metadata)
+	copy(result[len(metadata):], data)
 	return result
 }
 

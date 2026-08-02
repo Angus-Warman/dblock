@@ -8,7 +8,8 @@ import (
 
 func TestMetadataSchemaValue(t *testing.T) {
 	db, fp := openFileDB(t)
-	db.Exec("CREATE TABLE foo (label TEXT)")
+	mustExec(t, db, "CREATE TABLE foo (label TEXT)")
+	require.NoError(t, db.Close())
 	val := getMetadataValue(t, fp, 17)
 	require.Equal(t, uint32(1), val)
 }
