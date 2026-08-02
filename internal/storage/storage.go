@@ -8,17 +8,21 @@ import (
 
 type BlockID int64
 type BlockOffset int64
+type WalID int64
+type TxID int64
 
 const BlockSize = 1024 * 8
 
 type TxStorage struct {
+	id          TxID
 	wal         *WalStorage
-	maxPage     BlockID // at time of open
+	maxWalBlock WalID // at time of open
 	dirtyBlocks []Block
 }
 
+// GetBlock returns either the committed block from main, or the WAL block that existed when TxStorage first opened
 func (s *TxStorage) GetBlock(id BlockID) ([]byte, error) {
-	return s.wal.GetBlock(id) // To max?
+	return s.wal.GetBlock(id, s.maxWalBlock)
 }
 
 func (s *TxStorage) PutBlock(id BlockID, buf []byte) {
@@ -52,15 +56,32 @@ func (s *TxStorage) Commit() error {
 	}
 
 	s.dirtyBlocks = []Block{}
+	// Should delete itself
+	return nil
+}
+
+func (s *TxStorage) Rollback() error {
+	// Should delete itself
 	return nil
 }
 
 type WalStorage struct {
-	mu       sync.Mutex
-	walIndex map[BlockID]BlockOffset
-	main     StorageFile
-	wal      StorageFile
-	maxBlock BlockID
+	mu            sync.Mutex
+	walIndex      map[BlockID]WalID
+	walOffsets    map[WalID]BlockOffset
+	txUsingWalIDs map[TxID]WalID
+	main          StorageFile
+	wal           StorageFile
+	maxWalID      WalID
+}
+
+func (s *WalStorage) Close() error {
+	// Sync?
+
+	mainErr := s.main.Close()
+	walErr := s.wal.Close()
+
+	return errors.Join(mainErr, walErr)
 }
 
 func OpenWalStorage(dsn string) (*WalStorage, error) {
@@ -91,16 +112,19 @@ func OpenWalStorage(dsn string) (*WalStorage, error) {
 
 func NewWalPager(main StorageFile, wal StorageFile) *WalStorage {
 	return &WalStorage{
-		main:     main,
-		wal:      wal,
-		maxBlock: 0, // Or read from wal?
+		walIndex:      make(map[BlockID]WalID),
+		walOffsets:    make(map[WalID]BlockOffset),
+		txUsingWalIDs: make(map[TxID]WalID),
+		main:          main,
+		wal:           wal,
+		maxWalID:      0, // Or read from wal?
 	}
 }
 
 func (w *WalStorage) NewTxPager() *TxStorage {
 	return &TxStorage{
-		wal:     w,
-		maxPage: w.maxBlock,
+		wal:         w,
+		maxWalBlock: w.maxWalID,
 	}
 }
 
@@ -114,19 +138,20 @@ func pageOffset(id BlockID) (BlockOffset, BlockOffset) {
 
 var ErrEmptyBlock = errors.New("empty block")
 
-func (p *WalStorage) GetBlock(id BlockID) ([]byte, error) {
+func (p *WalStorage) GetBlock(id BlockID, toMax WalID) ([]byte, error) {
 	p.mu.Lock()
-	offset, inWAL := p.walIndex[id]
+	walID, inWAL := p.walIndex[id]
 	p.mu.Unlock()
 
-	if inWAL {
+	if inWAL && walID <= toMax {
 		buf := make([]byte, BlockSize)
-		if _, err := p.wal.ReadAt(buf, int64(offset+frameHeaderSize)); err != nil {
+		if _, err := p.wal.ReadAt(buf, int64(walID+frameHeaderSize)); err != nil {
 			return nil, fmt.Errorf("GetPage: %w", err)
 		}
 		return buf, nil
 	}
 
+	// Else get from main
 	start, end := pageOffset(id)
 	mainSize, err := p.main.Size()
 
