@@ -16,6 +16,28 @@ type RowID int64
 const RootSchemaPageID PageID = 0
 const MetadataLength = 100
 
+var dblockMagic = []byte("dblock")
+
+func encodeMetadata() []byte {
+	metadata := make([]byte, MetadataLength)
+	copy(metadata, dblockMagic)
+	return metadata
+}
+
+func joinHeaderPageData(data []byte) []byte {
+	result := make([]byte, MetadataLength+len(data))
+	copy(result, encodeMetadata())
+	copy(result[MetadataLength:], data)
+	return result
+}
+
+func splitHeaderPageData(data []byte) ([]byte, []byte) {
+	if len(data) < MetadataLength {
+		return nil, data
+	}
+	return data[:MetadataLength], data[MetadataLength:]
+}
+
 const PageSize = 8 * 1024
 
 const (
@@ -102,9 +124,9 @@ type Page struct {
 func (p *Page) Encode() ([]byte, error) {
 	pageSize := PageSize
 
-	// if p.ID == RootSchemaPageID {
-	// 	pageSize = PageSize - MetadataLength
-	// }
+	if p.ID == RootSchemaPageID {
+		pageSize = PageSize - MetadataLength
+	}
 
 	var s slot
 	slotSize := s.size(p.IsLeaf)

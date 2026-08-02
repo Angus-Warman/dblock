@@ -1,8 +1,10 @@
 package internal
 
 import (
+	"bytes"
 	"dblock2/internal/storage"
 	"errors"
+	"fmt"
 )
 
 type Pager interface {
@@ -23,9 +25,32 @@ func NewPagerSource(dsn string) (*PagerSource, error) {
 		return nil, err
 	}
 
+	if err := validateMetadata(wal); err != nil {
+		return nil, err
+	}
+
 	return &PagerSource{
 		wal: wal,
 	}, nil
+}
+
+// validateMetadata checks the magic bytes of an existing database file. A fresh
+// (empty) file has no metadata yet and is left untouched.
+func validateMetadata(wal *storage.WalStorage) error {
+	buf, err := wal.GetBlock(0, 0)
+
+	if err != nil {
+		if errors.Is(err, storage.ErrEmptyBlock) {
+			return nil
+		}
+		return err
+	}
+
+	if !bytes.Equal(buf[:len(dblockMagic)], dblockMagic) {
+		return fmt.Errorf("not a dblock database file")
+	}
+
+	return nil
 }
 
 func (s *PagerSource) Close() error {
@@ -56,6 +81,11 @@ func (p *StoragePager) GetPage(id PageID) (*Page, error) {
 		return nil, err
 	}
 
+	// The root schema page shares its block with the database metadata.
+	if id == RootSchemaPageID {
+		_, buf = splitHeaderPageData(buf)
+	}
+
 	return Decode(buf)
 }
 
@@ -65,6 +95,11 @@ func (p *StoragePager) PutPage(id PageID, page *Page) error {
 
 	if err != nil {
 		return err
+	}
+
+	// The root schema page shares its block with the database metadata.
+	if id == RootSchemaPageID {
+		buf = joinHeaderPageData(buf)
 	}
 
 	p.store.PutBlock(storage.BlockID(id), buf)

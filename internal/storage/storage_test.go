@@ -19,8 +19,7 @@ func newTestWal(t *testing.T) (*WalStorage, *MemoryFile) {
 func seedBlock(t *testing.T, main File, id BlockID, data []byte) {
 	t.Helper()
 	require.Len(t, data, BlockSize)
-	start, _ := pageOffset(id)
-	_, err := main.WriteAt(data, int64(start))
+	_, err := main.WriteAt(data, int64(id*BlockSize))
 	require.NoError(t, err)
 }
 

@@ -1,7 +1,6 @@
 package storage
 
 import (
-	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -15,41 +14,6 @@ type WalID int64
 type TxID int64
 
 const BlockSize = 1024 * 8
-
-const HeaderSize = 100
-
-var dblockMagic = []byte("dblock")
-
-func ensureHeader(main File) error {
-	size, err := main.Size()
-
-	if err != nil {
-		return err
-	}
-
-	if size == 0 {
-		header := make([]byte, HeaderSize)
-		copy(header, dblockMagic)
-		if _, err := main.WriteAt(header, 0); err != nil {
-			return err
-		}
-		return main.Sync()
-	}
-
-	if size < HeaderSize {
-		return fmt.Errorf("database file is smaller than the %d-byte header", HeaderSize)
-	}
-
-	fileMagic := make([]byte, len(dblockMagic))
-	if _, err := main.ReadAt(fileMagic, 0); err != nil {
-		return err
-	}
-	if !bytes.Equal(fileMagic, dblockMagic) {
-		return fmt.Errorf("not a dblock database file")
-	}
-
-	return nil
-}
 
 type TxStorage struct {
 	id          TxID
@@ -166,11 +130,8 @@ func OpenWalStorage(dsn string) (*WalStorage, error) {
 }
 
 func NewWalStorage(main File, wal File) (*WalStorage, error) {
+	// Reopened files may already hold pages in main; never allocate below them.
 	nextBlockID := BlockID(1)
-
-	if err := ensureHeader(main); err != nil {
-		return nil, err
-	}
 
 	size, err := main.Size()
 
@@ -239,7 +200,7 @@ const frameHeaderSize = 24
 const frameSize = frameHeaderSize + BlockSize
 
 func pageOffset(id BlockID) (BlockOffset, BlockOffset) {
-	start := HeaderSize + int64(id)*BlockSize
+	start := id * BlockSize
 	return BlockOffset(start), BlockOffset(start + BlockSize)
 }
 
