@@ -34,7 +34,7 @@ func mustQueryOne(t *testing.T, db *sql.DB, query string, expectedRow []any) {
 	rows, err := db.Query(query)
 	require.NoError(t, err)
 	rowVals := getRows(t, rows)
-	require.GreaterOrEqual(t, 1, len(rowVals))
+	require.Len(t, rowVals, 1)
 	require.Equal(t, expectedRow, rowVals[0])
 }
 
@@ -54,6 +54,7 @@ func getColumn(t *testing.T, rows *sql.Rows, colIdx int) []any {
 	colValues := []any{}
 
 	for rowIdx := range rowValues {
+		require.Less(t, colIdx, len(rowValues[rowIdx]))
 		colValues = append(colValues, rowValues[rowIdx][colIdx])
 	}
 

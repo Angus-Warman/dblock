@@ -131,7 +131,12 @@ func NewPager(dsn string) (Pager, error) {
 		defer memPagerLock.Unlock()
 
 		if globalMemPager == nil {
-			p := NewMemoryPager()
+			p, err := NewMemoryPager()
+
+			if err != nil {
+				return nil, err
+			}
+
 			globalMemPager = p
 		}
 
@@ -139,7 +144,7 @@ func NewPager(dsn string) (Pager, error) {
 		return globalMemPager, nil
 	}
 
-	return nil, fmt.Errorf("WIP")
+	return NewFilePager(dsn)
 }
 
 func (p *MemoryPager) Close() error {
@@ -153,10 +158,4 @@ func (p *MemoryPager) Close() error {
 
 	globalMemPager = nil
 	return nil
-}
-
-func NewMemoryPager() *MemoryPager {
-	return &MemoryPager{
-		nextID: 1, // RootSchemaPageID (0) is reserved
-	}
 }

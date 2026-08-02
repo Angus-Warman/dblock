@@ -29,7 +29,7 @@ func NewConn(dsn string) (*Conn, error) {
 	pager, err := NewPager(dsn)
 
 	if err != nil {
-		return nil, fmt.Errorf("NewTx: %w", err)
+		return nil, fmt.Errorf("NewConn: %w", err)
 	}
 
 	return &Conn{
