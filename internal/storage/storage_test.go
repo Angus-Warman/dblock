@@ -11,13 +11,16 @@ func newTestWal(t *testing.T) (*WalStorage, *MemoryFile) {
 	t.Helper()
 	main := OpenMemoryFile(t.Name() + "-main")
 	wal := OpenMemoryFile(t.Name() + "-wal")
-	return NewWalStorage(main, wal), main
+	store, err := NewWalStorage(main, wal)
+	require.NoError(t, err)
+	return store, main
 }
 
 func seedBlock(t *testing.T, main File, id BlockID, data []byte) {
 	t.Helper()
 	require.Len(t, data, BlockSize)
-	_, err := main.WriteAt(data, int64(id*BlockSize))
+	start, _ := pageOffset(id)
+	_, err := main.WriteAt(data, int64(start))
 	require.NoError(t, err)
 }
 

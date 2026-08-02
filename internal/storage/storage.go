@@ -1,6 +1,7 @@
 package storage
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -14,6 +15,41 @@ type WalID int64
 type TxID int64
 
 const BlockSize = 1024 * 8
+
+const HeaderSize = 100
+
+var dblockMagic = []byte("dblock")
+
+func ensureHeader(main File) error {
+	size, err := main.Size()
+
+	if err != nil {
+		return err
+	}
+
+	if size == 0 {
+		header := make([]byte, HeaderSize)
+		copy(header, dblockMagic)
+		if _, err := main.WriteAt(header, 0); err != nil {
+			return err
+		}
+		return main.Sync()
+	}
+
+	if size < HeaderSize {
+		return fmt.Errorf("database file is smaller than the %d-byte header", HeaderSize)
+	}
+
+	fileMagic := make([]byte, len(dblockMagic))
+	if _, err := main.ReadAt(fileMagic, 0); err != nil {
+		return err
+	}
+	if !bytes.Equal(fileMagic, dblockMagic) {
+		return fmt.Errorf("not a dblock database file")
+	}
+
+	return nil
+}
 
 type TxStorage struct {
 	id          TxID
@@ -105,12 +141,10 @@ func (s *WalStorage) Close() error {
 
 func OpenWalStorage(dsn string) (*WalStorage, error) {
 	if dsn == ":memory:" {
-		inMemWal := NewWalStorage(
+		return NewWalStorage(
 			OpenMemoryFile("memory-main"),
 			OpenMemoryFile("memory-wal"),
 		)
-
-		return inMemWal, nil
 	}
 
 	mainFp := dsn
@@ -128,16 +162,24 @@ func OpenWalStorage(dsn string) (*WalStorage, error) {
 		return nil, err
 	}
 
-	return NewWalStorage(main, wal), nil
+	return NewWalStorage(main, wal)
 }
 
-func NewWalStorage(main File, wal File) *WalStorage {
-	// Reopened files may already hold pages in main; never allocate below them.
+func NewWalStorage(main File, wal File) (*WalStorage, error) {
 	nextBlockID := BlockID(1)
-	if size, err := main.Size(); err == nil {
-		if n := BlockID(size / BlockSize); n > nextBlockID {
-			nextBlockID = n
-		}
+
+	if err := ensureHeader(main); err != nil {
+		return nil, err
+	}
+
+	size, err := main.Size()
+
+	if err != nil {
+		return nil, err
+	}
+
+	if n := BlockID(size / BlockSize); n > nextBlockID {
+		nextBlockID = n
 	}
 
 	return &WalStorage{
@@ -148,7 +190,7 @@ func NewWalStorage(main File, wal File) *WalStorage {
 		wal:           wal,
 		maxWalID:      0, // Or read from wal?
 		nextBlockID:   nextBlockID,
-	}
+	}, nil
 }
 
 func (w *WalStorage) NewTxStorage() *TxStorage {
@@ -197,7 +239,7 @@ const frameHeaderSize = 24
 const frameSize = frameHeaderSize + BlockSize
 
 func pageOffset(id BlockID) (BlockOffset, BlockOffset) {
-	start := id * BlockSize
+	start := HeaderSize + int64(id)*BlockSize
 	return BlockOffset(start), BlockOffset(start + BlockSize)
 }
 

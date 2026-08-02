@@ -12,7 +12,9 @@ func newTestWal(t *testing.T) *storage.WalStorage {
 	t.Helper()
 	main := storage.OpenMemoryFile(t.Name() + "-main")
 	wal := storage.OpenMemoryFile(t.Name() + "-wal")
-	return storage.NewWalStorage(main, wal)
+	store, err := storage.NewWalStorage(main, wal)
+	require.NoError(t, err)
+	return store
 }
 
 func TestStoragePagerRoundTrip(t *testing.T) {

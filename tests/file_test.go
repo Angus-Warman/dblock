@@ -2,6 +2,7 @@ package tests
 
 import (
 	"database/sql"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -39,4 +40,18 @@ func TestSaveToFile(t *testing.T) {
 	mustExec(t, reopened, "CREATE TABLE bar (label TEXT)")
 	mustExec(t, reopened, "INSERT INTO bar VALUES (?)", "baz")
 	mustQueryOne(t, reopened, "SELECT * FROM bar", []any{"baz"})
+}
+
+func TestMetadata(t *testing.T) {
+	fp := filepath.Join(t.TempDir(), t.Name())
+	db := openFileDB(t, fp)
+	mustExec(t, db, "CREATE TABLE foo (label TEXT, value INTEGER)")
+	db.Close()
+
+	expectedMetadata := []byte("dblock")
+	padding := make([]byte, 100-6)
+	expectedMetadata = append(expectedMetadata, padding...)
+	buf, err := os.ReadFile(fp)
+	require.NoError(t, err)
+	require.Equal(t, expectedMetadata, buf[0:100])
 }
