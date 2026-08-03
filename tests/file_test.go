@@ -4,7 +4,7 @@ import (
 	"os"
 	"testing"
 
-	"dblock2/internal"
+	"dblock2/internal/metadata"
 
 	"github.com/stretchr/testify/require"
 )
@@ -38,7 +38,7 @@ func TestMetadata(t *testing.T) {
 	buf, err := os.ReadFile(fp)
 	require.NoError(t, err)
 
-	m, err := internal.DecodeMetadata(buf[:internal.MetadataLength])
+	m, err := metadata.Decode(buf[:metadata.Length])
 	require.NoError(t, err)
 	require.Equal(t, "dblock", m.Dblock)
 	require.Equal(t, uint16(1), m.DatabaseVersion)
@@ -49,5 +49,5 @@ func TestMetadata(t *testing.T) {
 	require.Equal(t, uint32(0), m.TokenValue)
 
 	// The file must start with exactly the encoded metadata and no more.
-	require.Equal(t, m.Encode(), buf[:internal.MetadataLength])
+	require.Equal(t, m.Encode(), buf[:metadata.Length])
 }

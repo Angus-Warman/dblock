@@ -1,4 +1,4 @@
-package internal
+package metadata
 
 import (
 	"fmt"
@@ -18,7 +18,7 @@ type Metadata struct {
 
 const headerMagic = "dblock"
 
-func NewMetadata() *Metadata {
+func New() *Metadata {
 	return &Metadata{
 		Dblock:              headerMagic,
 		DatabaseVersion:     1,
@@ -30,7 +30,7 @@ func NewMetadata() *Metadata {
 	}
 }
 
-const MetadataLength = 100
+const Length = 100
 
 func (m *Metadata) Encode() []byte {
 	e := codec.NewEncoder()
@@ -42,12 +42,12 @@ func (m *Metadata) Encode() []byte {
 	e.PutUint32(m.FileChangeCounter)
 	e.PutUint32(m.SchemaChangeCounter)
 	e.PutUint32(m.TokenValue)
-	e.Pad(MetadataLength)
+	e.Pad(Length)
 
 	return e.Bytes()
 }
 
-func DecodeMetadata(buf []byte) (*Metadata, error) {
+func Decode(buf []byte) (*Metadata, error) {
 	dec := codec.NewDecoder(buf)
 
 	magic, err := dec.GetBytes(6)

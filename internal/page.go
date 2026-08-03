@@ -5,6 +5,8 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+
+	"dblock2/internal/metadata"
 )
 
 var LE = binary.LittleEndian
@@ -17,22 +19,22 @@ const RootSchemaPageID PageID = 0
 
 // joinHeaderPageData prepends the encoded database metadata to a page's data,
 // producing the full first block as stored on disk.
-func joinHeaderPageData(m *Metadata, data []byte) []byte {
+func joinHeaderPageData(m *metadata.Metadata, data []byte) []byte {
 	if m == nil {
-		m = NewMetadata()
+		m = metadata.New()
 	}
-	metadata := m.Encode()
-	result := make([]byte, len(metadata)+len(data))
-	copy(result, metadata)
-	copy(result[len(metadata):], data)
+	encoded := m.Encode()
+	result := make([]byte, len(encoded)+len(data))
+	copy(result, encoded)
+	copy(result[len(encoded):], data)
 	return result
 }
 
 func splitHeaderPageData(data []byte) ([]byte, []byte) {
-	if len(data) < MetadataLength {
+	if len(data) < metadata.Length {
 		return nil, data
 	}
-	return data[:MetadataLength], data[MetadataLength:]
+	return data[:metadata.Length], data[metadata.Length:]
 }
 
 const PageSize = 8 * 1024
@@ -122,7 +124,7 @@ func (p *Page) Encode() ([]byte, error) {
 	pageSize := PageSize
 
 	if p.ID == RootSchemaPageID {
-		pageSize = PageSize - MetadataLength
+		pageSize = PageSize - metadata.Length
 	}
 
 	var s slot

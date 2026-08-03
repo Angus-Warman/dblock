@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"dblock2/internal/metadata"
 	"dblock2/internal/storage"
 	"errors"
 )
@@ -8,8 +9,8 @@ import (
 type Pager interface {
 	GetPage(PageID) (*Page, error)
 	PutPage(PageID, *Page) error
-	GetMetadata() (*Metadata, error)
-	PutMetadata(*Metadata) error
+	GetMetadata() (*metadata.Metadata, error)
+	PutMetadata(*metadata.Metadata) error
 	NextID() PageID
 	Close() error
 }
@@ -66,22 +67,22 @@ func (p *StoragePager) GetPage(id PageID) (*Page, error) {
 	return Decode(buf)
 }
 
-func (p *StoragePager) GetMetadata() (*Metadata, error) {
+func (p *StoragePager) GetMetadata() (*metadata.Metadata, error) {
 	buf, err := p.store.GetBlock(storage.BlockID(RootSchemaPageID))
 
 	if err != nil {
 		if errors.Is(err, storage.ErrEmptyBlock) {
-			return NewMetadata(), nil
+			return metadata.New(), nil
 		}
 		return nil, err
 	}
 
 	buf, _ = splitHeaderPageData(buf)
 
-	return DecodeMetadata(buf)
+	return metadata.Decode(buf)
 }
 
-func (p *StoragePager) PutMetadata(m *Metadata) error {
+func (p *StoragePager) PutMetadata(m *metadata.Metadata) error {
 	buf, err := p.store.GetBlock(storage.BlockID(RootSchemaPageID))
 
 	if err != nil {
@@ -90,7 +91,7 @@ func (p *StoragePager) PutMetadata(m *Metadata) error {
 		}
 
 		// No root page yet: write the metadata ahead of an empty page region.
-		buf = make([]byte, PageSize-MetadataLength)
+		buf = make([]byte, PageSize-metadata.Length)
 	} else {
 		_, buf = splitHeaderPageData(buf)
 	}

@@ -3,6 +3,7 @@ package internal
 import (
 	"testing"
 
+	"dblock2/internal/metadata"
 	"dblock2/internal/storage"
 
 	"github.com/stretchr/testify/require"
@@ -52,7 +53,7 @@ func TestPagerMetadataRoundTrip(t *testing.T) {
 	// A fresh database reports default metadata.
 	m, err := pager.GetMetadata()
 	require.NoError(t, err)
-	require.Equal(t, NewMetadata(), m)
+	require.Equal(t, metadata.New(), m)
 
 	// Writing the root schema page must not clobber the metadata.
 	leaf := &Page{
