@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -44,13 +45,6 @@ func TestCatchIntegerMismatch(t *testing.T) {
 	require.Error(t, err)
 }
 
-func TestCatchTextMismatch(t *testing.T) {
-	db := openDB(t)
-	mustExec(t, db, "CREATE TABLE foo (value TEXT)")
-	_, err := db.Exec("INSERT INTO foo VALUES (?)", 42)
-	require.Error(t, err)
-}
-
 func TestInsertNull(t *testing.T) {
 	db := openDB(t)
 	mustExec(t, db, "CREATE TABLE foo (value INTEGER)")
@@ -65,10 +59,31 @@ func TestInsertNullIntoAny(t *testing.T) {
 	mustQueryOne(t, db, "SELECT * FROM foo", []any{nil})
 }
 
-func TestSemiRoundtripInt(t *testing.T) {
-	db := openDB(t)
-	mustExec(t, db, "CREATE TABLE foo (value INTEGER)")
-	original := int32(1234)
-	mustExec(t, db, "INSERT INTO foo VALUES (?)", original)
-	mustQueryOne(t, db, "SELECT * FROM foo", []any{int64(1234)})
+func TestDataCoercion(t *testing.T) {
+	type testCase struct {
+		colType string
+		in      any
+		out     any
+	}
+
+	testCases := []testCase{
+		{colType: "INTEGER", in: 1, out: int64(1)},
+		{colType: "TEXT", in: 1, out: "1"},
+		{colType: "REAL", in: 2, out: 2.0},
+		{colType: "BLOB", in: "bar", out: []byte("bar")},
+		{colType: "TEXT", in: []byte("bar"), out: "bar"},
+		{colType: "TEXT", in: time.Unix(0, 0).UTC(), out: "1970-01-01T00:00:00Z"},
+		{colType: "BOOL", in: 1, out: true},
+		{colType: "BOOL", in: "TRUE", out: true},
+	}
+
+	for _, tc := range testCases {
+		t.Run(fmt.Sprint(tc), func(t *testing.T) {
+			db := openDB(t)
+			tableDef := fmt.Sprintf("CREATE TABLE foo (value %v)", tc.colType)
+			mustExec(t, db, tableDef)
+			mustExec(t, db, "INSERT INTO foo VALUES (?)", tc.in)
+			mustQueryOne(t, db, "SELECT * FROM foo", []any{tc.out})
+		})
+	}
 }

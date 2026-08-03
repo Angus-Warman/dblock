@@ -5,9 +5,6 @@ import (
 	"fmt"
 	"slices"
 	"strconv"
-	"time"
-
-	"github.com/google/uuid"
 )
 
 type Engine struct {
@@ -253,58 +250,6 @@ func (e *Engine) lookupTable(name string) (*tableInfo, error) {
 	return nil, fmt.Errorf("no such table: %q", name)
 }
 
-func validateValue(col Column, value any) error {
-	if value == nil {
-		if col.dataType == AnyType {
-			return nil
-		}
-
-		return fmt.Errorf("cannot insert null value into column %q, expects %v", col.name, col.dataType)
-	}
-
-	ok := false
-
-	switch col.dataType {
-	case IntegerType:
-		_, ok = value.(int64)
-
-	case RealType:
-		_, ok = value.(float64)
-
-	case TextType:
-		_, ok = value.(string)
-
-	case BoolType:
-		_, ok = value.(bool)
-
-	case BlobType:
-		_, ok = value.([]byte)
-
-	case TimeType:
-		_, ok = value.(time.Time)
-
-	case UUIDType:
-		switch v := value.(type) {
-		case uuid.UUID:
-			ok = true
-		case string:
-			_, err := uuid.Parse(v)
-			ok = err == nil
-		case []byte:
-			ok = len(v) == 16
-		}
-
-	default:
-		return fmt.Errorf("unsupported data type %d", col.dataType)
-	}
-
-	if !ok {
-		return fmt.Errorf("column %q expects %s, got %T", col.name, col.dataType, value)
-	}
-
-	return nil
-}
-
 func (e *Engine) Insert(stmt *InsertStmt, args []any) (insertedID int64, rowsAffected int64, err error) {
 	if stmt == nil {
 		return -1, -1, fmt.Errorf("Insert: nothing to insert in statement")
@@ -338,9 +283,13 @@ func (e *Engine) Insert(stmt *InsertStmt, args []any) (insertedID int64, rowsAff
 	}
 
 	for i, col := range info.table.columns {
-		if err := validateValue(col, values[i]); err != nil {
+		coerced, err := coerceValue(col, values[i])
+
+		if err != nil {
 			return -1, -1, fmt.Errorf("Insert: %w", err)
 		}
+
+		values[i] = coerced
 	}
 
 	row := Row{Values: values}
