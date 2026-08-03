@@ -2,7 +2,7 @@ package tests
 
 import (
 	"database/sql"
-	"encoding/binary"
+	"dblock2/internal/metadata"
 	"os"
 	"path/filepath"
 	"testing"
@@ -129,12 +129,13 @@ func reopenFileDB(t *testing.T, fp string) *sql.DB {
 	return db
 }
 
-func getMetadataValue(t *testing.T, fp string, offset int) uint32 {
+func getMetadata(t *testing.T, fp string) *metadata.Metadata {
 	t.Helper()
 	f, err := os.Open(fp)
 	require.NoError(t, err)
-	buf := make([]byte, 4)
-	f.ReadAt(buf, int64(offset))
-	value := binary.LittleEndian.Uint32(buf)
-	return value
+	buf := make([]byte, 100)
+	f.ReadAt(buf, 0)
+	m, err := metadata.Decode(buf)
+	require.NoError(t, err)
+	return m
 }

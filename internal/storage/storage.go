@@ -566,7 +566,7 @@ func (p *WalStorage) bumpFileChangeCounter() error {
 		return err
 	}
 
-	m.FileChangeCounter++
+	m.FileVersion++
 
 	return p.putMetadataHot(m)
 }

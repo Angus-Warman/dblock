@@ -40,13 +40,12 @@ func TestMetadata(t *testing.T) {
 
 	m, err := metadata.Decode(buf[:metadata.Length])
 	require.NoError(t, err)
-	require.Equal(t, "dblock", m.Dblock)
-	require.Equal(t, uint16(1), m.DatabaseVersion)
+	require.Equal(t, "dblock01", m.Dblock)
 	require.Equal(t, uint8(13), m.PageSizePower)
 	require.Equal(t, uint32(0), m.NumberOfPages)
-	require.Equal(t, uint32(1), m.FileChangeCounter)
-	require.Equal(t, uint32(1), m.SchemaChangeCounter)
-	require.Equal(t, uint32(0), m.TokenValue)
+	require.Equal(t, uint32(2), m.FileVersion)
+	require.Equal(t, uint32(2), m.SchemaVersion)
+	require.Equal(t, uint32(0), m.Token)
 
 	// The file must start with exactly the encoded metadata and no more.
 	require.Equal(t, m.Encode(), buf[:metadata.Length])

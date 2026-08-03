@@ -66,8 +66,9 @@ func TestPagerMetadataRoundTrip(t *testing.T) {
 	require.NoError(t, pager.PutPage(RootSchemaPageID, leaf))
 
 	// Updating the metadata must not clobber the root page's data.
-	m.SchemaChangeCounter = 7
-	m.FileChangeCounter = 3
+	m.SchemaVersion = 7
+	m.FileVersion = 3
+	m.CalculateChecksum()
 	require.NoError(t, pager.PutMetadata(m))
 
 	got, err := pager.GetMetadata()

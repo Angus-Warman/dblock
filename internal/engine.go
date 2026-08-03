@@ -238,7 +238,7 @@ func (e *Engine) bumpSchemaVersion() error {
 		return err
 	}
 
-	m.SchemaChangeCounter++
+	m.SchemaVersion++
 
 	return e.pager.PutMetadata(m)
 }

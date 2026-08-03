@@ -149,5 +149,5 @@ func TestCheckpointPreservesSnapshots(t *testing.T) {
 	txC := pager.NewTxStorage()
 	meta, err := txC.wal.GetMetadata()
 	require.NoError(t, err)
-	require.Equal(t, uint32(1), meta.FileChangeCounter)
+	require.Equal(t, uint32(2), meta.FileVersion)
 }

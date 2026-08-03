@@ -136,7 +136,7 @@ func TestCheckpointErrorMidway(t *testing.T) {
 
 	meta, err := store.GetMetadata()
 	require.NoError(t, err)
-	require.Equal(t, uint32(0), meta.FileChangeCounter)
+	require.Equal(t, uint32(1), meta.FileVersion)
 }
 
 // makeFrame builds a single WAL frame: header (blockID, commit marker,
