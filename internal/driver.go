@@ -6,6 +6,8 @@ import (
 	"dblock2/internal/parser"
 	"fmt"
 	"io"
+
+	"github.com/google/uuid"
 )
 
 type Driver struct {
@@ -79,6 +81,17 @@ func (c *Conn) Begin() (driver.Tx, error) {
 	c.activeTx = tx
 
 	return tx, nil
+}
+
+func (c *Conn) CheckNamedValue(nv *driver.NamedValue) error {
+	switch v := nv.Value.(type) {
+	case uuid.UUID:
+		b, _ := v.MarshalBinary() // Never fails
+		nv.Value = b
+		return nil
+	default:
+		return driver.ErrSkip
+	}
 }
 
 func (c *Conn) Prepare(query string) (driver.Stmt, error) {
