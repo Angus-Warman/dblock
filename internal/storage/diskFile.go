@@ -1,6 +1,11 @@
 package storage
 
-import "os"
+import (
+	"fmt"
+	"os"
+
+	"golang.org/x/sys/unix"
+)
 
 type DiskFile struct {
 	f *os.File
@@ -8,12 +13,30 @@ type DiskFile struct {
 
 func OpenDiskFile(path string) (*DiskFile, error) {
 	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0o644)
-
 	if err != nil {
 		return nil, err
 	}
 
+	if err := unix.Flock(int(f.Fd()), unix.LOCK_EX|unix.LOCK_NB); err != nil {
+		f.Close()
+		if err == unix.EWOULDBLOCK {
+			return nil, fmt.Errorf("OpenDiskFile: %s is locked by another process", path)
+		}
+		return nil, fmt.Errorf("OpenDiskFile: flock failed: %w", err)
+	}
+
 	return &DiskFile{f: f}, nil
+}
+
+func (d *DiskFile) Close() error {
+	// Unlocking is optional, closing the fd releases the flock lock
+	err := unix.Flock(int(d.f.Fd()), unix.LOCK_UN)
+
+	if err != nil {
+		return err
+	}
+
+	return d.f.Close()
 }
 
 func (f *DiskFile) Exists() (bool, error) {
@@ -49,8 +72,4 @@ func (f *DiskFile) Size() (int64, error) {
 
 func (f *DiskFile) Sync() error {
 	return f.f.Sync()
-}
-
-func (f *DiskFile) Close() error {
-	return f.f.Close()
 }

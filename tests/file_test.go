@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"database/sql"
 	"os"
 	"testing"
 
@@ -49,4 +50,12 @@ func TestMetadata(t *testing.T) {
 
 	// The file must start with exactly the encoded metadata and no more.
 	require.Equal(t, m.Encode(), buf[:metadata.Length])
+}
+
+func TestOpenFileTwice(t *testing.T) {
+	_, fp := openFileDB(t)
+
+	// Without closing, open second db. Should fail.
+	_, err := sql.Open("dblock", fp)
+	require.Error(t, err)
 }

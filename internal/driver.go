@@ -6,7 +6,6 @@ import (
 	"dblock2/internal/parser"
 	"fmt"
 	"io"
-	"sync"
 )
 
 type Driver struct {
@@ -22,28 +21,24 @@ func (d *Driver) Open(name string) (driver.Conn, error) {
 }
 
 func (d *Driver) OpenConnector(dsn string) (driver.Connector, error) {
+	source, err := NewPagerSource(dsn)
+
+	if err != nil {
+		return nil, err
+	}
+
 	return &Connector{
-		dsn: dsn,
+		dsn:    dsn,
+		source: source,
 	}, nil
 }
 
 type Connector struct {
 	dsn    string
-	mu     sync.Mutex
 	source *PagerSource
 }
 
 func (c *Connector) Connect(_ context.Context) (driver.Conn, error) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	if c.source == nil {
-		var err error
-		c.source, err = NewPagerSource(c.dsn)
-		if err != nil {
-			return nil, err
-		}
-	}
 	return &Conn{
 		source: c.source,
 	}, nil
