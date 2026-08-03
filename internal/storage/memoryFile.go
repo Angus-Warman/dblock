@@ -18,6 +18,10 @@ func OpenMemoryFile(name string) *MemoryFile {
 	return newFile
 }
 
+func (f *MemoryFile) Exists() (bool, error) {
+	return true, nil
+}
+
 func (f *MemoryFile) ReadAt(buf []byte, offset int64) (int, error) {
 	if offset < 0 {
 		return 0, os.ErrInvalid

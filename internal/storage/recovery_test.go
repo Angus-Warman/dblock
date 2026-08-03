@@ -36,6 +36,13 @@ func openErrorFile(name string, errorAfter int) *errorFile {
 	return newFile
 }
 
+func (f *errorFile) Exists() (bool, error) {
+	if !f.check() {
+		return false, errInjected
+	}
+	return f.f.Exists()
+}
+
 func (f *errorFile) ReadAt(buf []byte, offset int64) (int, error) {
 	if !f.check() {
 		return 0, errInjected

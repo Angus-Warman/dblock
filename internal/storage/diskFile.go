@@ -16,6 +16,17 @@ func OpenDiskFile(path string) (*DiskFile, error) {
 	return &DiskFile{f: f}, nil
 }
 
+func (f *DiskFile) Exists() (bool, error) {
+	_, err := f.f.Stat()
+	if err == nil {
+		return true, nil
+	}
+	if os.IsNotExist(err) {
+		return false, nil
+	}
+	return false, err
+}
+
 func (f *DiskFile) ReadAt(buf []byte, offset int64) (int, error) {
 	return f.f.ReadAt(buf, offset)
 }
