@@ -2,7 +2,7 @@ package internal
 
 import "dblock2/internal/codec"
 
-type TableDefinition struct {
+type Table struct {
 	name    string
 	columns []Column
 }
@@ -12,7 +12,7 @@ type Column struct {
 	dataType DataType
 }
 
-func (t *TableDefinition) Encode() []byte {
+func (t *Table) Encode() []byte {
 	e := codec.NewEncoder()
 
 	e.PutShortStringWithLength(t.name)
@@ -27,7 +27,7 @@ func (t *TableDefinition) Encode() []byte {
 	return e.Bytes()
 }
 
-func DecodeTableDefinition(buf []byte) (*TableDefinition, error) {
+func DecodeTable(buf []byte) (*Table, error) {
 	d := codec.NewDecoder(buf)
 
 	name, err := d.GetShortStringWithLength()
@@ -42,7 +42,7 @@ func DecodeTableDefinition(buf []byte) (*TableDefinition, error) {
 		return nil, err
 	}
 
-	td := &TableDefinition{
+	td := &Table{
 		name:    name,
 		columns: []Column{},
 	}
@@ -66,7 +66,7 @@ func DecodeTableDefinition(buf []byte) (*TableDefinition, error) {
 	return td, nil
 }
 
-func (td *TableDefinition) ColumnNames() []string {
+func (td *Table) ColumnNames() []string {
 	names := []string{}
 
 	for _, col := range td.columns {

@@ -16,8 +16,15 @@ func resolveSelect(parsed *parser.SelectStmt) (*QueryStmt, error) {
 		return nil, fmt.Errorf("table name empty")
 	}
 
+	projection, err := resolveProjection(parsed.Select.Items)
+
+	if err != nil {
+		return nil, err
+	}
+
 	sel := &SelectStmt{
-		tableName: parsed.TableName,
+		tableName:  parsed.TableName,
+		projection: projection,
 	}
 
 	queryStmt := &QueryStmt{
@@ -25,6 +32,62 @@ func resolveSelect(parsed *parser.SelectStmt) (*QueryStmt, error) {
 	}
 
 	return queryStmt, nil
+}
+
+func resolveProjection(items []parser.SelectItem) ([]ProjectedColumn, error) {
+	projection := []ProjectedColumn{}
+
+	for _, item := range items {
+		if item.Star {
+			continue
+		}
+
+		col, err := columnName(item.Expr)
+
+		if err != nil {
+			return nil, err
+		}
+
+		projection = append(projection, ProjectedColumn{source: col, alias: item.Alias})
+	}
+
+	return projection, nil
+}
+
+func columnName(expr *parser.Expr) (string, error) {
+	if expr == nil || expr.Left == nil {
+		return "", fmt.Errorf("unsupported expression in select list")
+	}
+
+	if expr.Op != "" || expr.Right != nil {
+		return "", fmt.Errorf("unsupported expression in select list")
+	}
+
+	term := expr.Left
+
+	if term.Op != "" || term.Right != nil {
+		return "", fmt.Errorf("unsupported expression in select list")
+	}
+
+	factor := term.Left
+
+	if factor == nil || factor.Star || factor.Func != nil || factor.SubExpr != nil {
+		return "", fmt.Errorf("unsupported expression in select list")
+	}
+
+	if factor.Num != "" || factor.Hex != "" || factor.Str != "" {
+		return "", fmt.Errorf("unsupported expression in select list")
+	}
+
+	if factor.Column == "" {
+		return "", fmt.Errorf("unsupported expression in select list")
+	}
+
+	if _, after, ok := strings.Cut(factor.Column, "."); ok {
+		return after, nil
+	}
+
+	return factor.Column, nil
 }
 
 func resolveCreate(parsed *parser.CreateStmt) (*ExecStmt, error) {

@@ -140,20 +140,36 @@ func (e *Engine) queryPragma(stmt *PragmaStmt) (Scanner, error) {
 		return nil, err
 	}
 
+	var val any
+
 	switch stmt.property {
 	case pragma.TokenProperty:
-		return newPragmaScanner([]string{"token"}, int64(m.Token)), nil
+		val = m.Token
 
 	case pragma.PageSizeProperty:
-		return newPragmaScanner([]string{"page_size"}, int64(PageSize)), nil
+		val = int64(PageSize)
 
 	default:
 		return nil, fmt.Errorf("queryPragma: unsupported pragma %q", stmt.property)
 	}
+
+	return NewPragmaScanner(stmt.property, val), nil
 }
 
 func (e *Engine) querySelect(stmt *SelectStmt, args []any) (Scanner, error) {
-	return e.SelectAllFromTable(stmt.tableName)
+	scanner, err := e.SelectAllFromTable(stmt.tableName)
+
+	if err != nil {
+		return nil, err
+	}
+
+	scanner, err = NewProjectorScanner(scanner, stmt)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return scanner, nil
 }
 
 func (e *Engine) SelectAllFromTable(tableName string) (Scanner, error) {
@@ -179,6 +195,7 @@ var schemaColumns = []string{"object_name", "object_type", "definition", "rootpa
 type tableInfo struct {
 	rootPage PageID
 	columns  []string
+	table    *Table
 }
 
 func (e *Engine) lookupTable(name string) (*tableInfo, error) {
@@ -201,7 +218,7 @@ func (e *Engine) lookupTable(name string) (*tableInfo, error) {
 			continue
 		}
 
-		td, err := DecodeTableDefinition(row.Values[2].([]byte))
+		td, err := DecodeTable(row.Values[2].([]byte))
 
 		if err != nil {
 			return nil, err
@@ -212,6 +229,7 @@ func (e *Engine) lookupTable(name string) (*tableInfo, error) {
 		return &tableInfo{
 			rootPage: PageID(row.Values[3].(int64)),
 			columns:  colNames,
+			table:    td,
 		}, nil
 	}
 
@@ -259,7 +277,7 @@ func (e *Engine) Insert(stmt *InsertStmt, args []any) (insertedID int64, rowsAff
 }
 
 func (e *Engine) ExecCreate(stmt *CreateStmt) error {
-	def := &TableDefinition{
+	def := &Table{
 		name:    stmt.tableName,
 		columns: stmt.columns,
 	}
@@ -273,7 +291,7 @@ const (
 	TableObject SchemaObjectType = "TABLE"
 )
 
-func (e *Engine) CreateTable(def *TableDefinition) error {
+func (e *Engine) CreateTable(def *Table) error {
 	if def == nil {
 		return fmt.Errorf("table definition is null")
 	}

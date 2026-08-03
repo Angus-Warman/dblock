@@ -29,5 +29,11 @@ type QueryStmt struct {
 }
 
 type SelectStmt struct {
-	tableName string
+	tableName  string
+	projection []ProjectedColumn
+}
+
+type ProjectedColumn struct {
+	source string
+	alias  string
 }

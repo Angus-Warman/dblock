@@ -140,3 +140,10 @@ func getMetadata(t *testing.T, fp string) *metadata.Metadata {
 	require.NoError(t, err)
 	return m
 }
+
+func mustColumns(t *testing.T, rows *sql.Rows) []string {
+	t.Helper()
+	cols, err := rows.Columns()
+	require.NoError(t, err)
+	return cols
+}
