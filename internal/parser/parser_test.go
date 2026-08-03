@@ -16,13 +16,13 @@ func TestParsePragma(t *testing.T) {
 	p := mustParse(t, "PRAGMA foo")
 	require.NotNil(t, p)
 	require.NotNil(t, p.Pragma)
-	require.Equal(t, p.Pragma.Target, "foo")
+	require.Equal(t, p.Pragma.Property, "foo")
 }
 
 func TestParsePragmaValue(t *testing.T) {
 	p := mustParse(t, "PRAGMA foo 1")
 	require.NotNil(t, p)
 	require.NotNil(t, p.Pragma)
-	require.Equal(t, p.Pragma.Target, "foo")
+	require.Equal(t, p.Pragma.Property, "foo")
 	require.Equal(t, p.Pragma.Value, "1")
 }

@@ -230,6 +230,6 @@ type SelectList struct {
 }
 
 type PragmaStmt struct {
-	Target string `parser:"\"PRAGMA\" @Ident"`
-	Value  string `parser:"(@(Ident|Number))?"`
+	Property string `parser:"\"PRAGMA\" @Ident"`
+	Value    string `parser:"(@(Ident|Number))?"`
 }

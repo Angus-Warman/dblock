@@ -1,8 +1,10 @@
 package internal
 
 import (
+	"dblock2/internal/pragma"
 	"fmt"
 	"slices"
+	"strconv"
 )
 
 type Engine struct {
@@ -36,6 +38,16 @@ func (e *Engine) Exec(stmt *ExecStmt, args []any) (insertedID int64, rowsAffecte
 
 	if stmt.insertStmt != nil {
 		return e.Insert(stmt.insertStmt, args)
+	}
+
+	if stmt.pragmaStmt != nil {
+		err := e.execPragma(stmt.pragmaStmt)
+
+		if err != nil {
+			return -1, -1, err
+		}
+
+		return 0, 0, nil
 	}
 
 	return -1, -1, fmt.Errorf("Exec: unsupported statement")
@@ -73,6 +85,74 @@ func (e *Engine) GetRootSchema() (*RootSchema, error) {
 }
 
 func (e *Engine) Query(stmt *QueryStmt, args []any) (Scanner, error) {
+	if stmt.selectStmt != nil {
+		return e.querySelect(stmt.selectStmt, args)
+	}
+
+	if stmt.pragmaStmt != nil {
+		return e.queryPragma(stmt.pragmaStmt)
+	}
+
+	return nil, fmt.Errorf("nothing to query in stmt")
+}
+
+func (e *Engine) execPragma(stmt *PragmaStmt) error {
+	m, err := e.pager.GetMetadata()
+
+	if err != nil {
+		return err
+	}
+
+	switch stmt.property {
+	case pragma.TokenProperty:
+		v, err := strconv.ParseUint(stmt.value, 10, 32)
+
+		if err != nil {
+			return fmt.Errorf("execPragma token: %w", err)
+		}
+
+		m.Token = uint32(v)
+
+	case pragma.PageSizeProperty:
+		v, err := strconv.ParseUint(stmt.value, 10, 32)
+
+		if err != nil {
+			return fmt.Errorf("execPragma page_size: %w", err)
+		}
+
+		if v != PageSize {
+			return fmt.Errorf("execPragma page_size: unsupported page size %d", v)
+		}
+
+	default:
+		return fmt.Errorf("execPragma: unsupported pragma %q", stmt.property)
+	}
+
+	m.CalculateChecksum()
+
+	return e.pager.PutMetadata(m)
+}
+
+func (e *Engine) queryPragma(stmt *PragmaStmt) (Scanner, error) {
+	m, err := e.pager.GetMetadata()
+
+	if err != nil {
+		return nil, err
+	}
+
+	switch stmt.property {
+	case pragma.TokenProperty:
+		return newPragmaScanner([]string{"token"}, int64(m.Token)), nil
+
+	case pragma.PageSizeProperty:
+		return newPragmaScanner([]string{"page_size"}, int64(PageSize)), nil
+
+	default:
+		return nil, fmt.Errorf("queryPragma: unsupported pragma %q", stmt.property)
+	}
+}
+
+func (e *Engine) querySelect(stmt *SelectStmt, args []any) (Scanner, error) {
 	return e.SelectAllFromTable(stmt.tableName)
 }
 

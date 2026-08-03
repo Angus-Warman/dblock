@@ -150,28 +150,46 @@ func (c *Conn) NewStmt(query string) (*Stmt, error) {
 	}
 
 	if parsed.Create != nil {
-		exec, err := resolveCreate(parsed.Create)
+		create, err := resolveCreate(parsed.Create)
 
 		if err != nil {
 			return nil, err
 		}
 
-		stmt.execStmt = exec
+		stmt.execStmt = create
 	}
 
 	if parsed.Insert != nil {
-		exec, err := resolveInsert(parsed.Insert)
+		insert, err := resolveInsert(parsed.Insert)
 
 		if err != nil {
 			return nil, err
 		}
 
-		stmt.execStmt = exec
+		stmt.execStmt = insert
 	}
 
 	if parsed.Select != nil {
-		stmt.queryStmt = &QueryStmt{
-			tableName: parsed.Select.TableName,
+		sel, err := resolveSelect(parsed.Select)
+
+		if err != nil {
+			return nil, err
+		}
+
+		stmt.queryStmt = sel
+	}
+
+	if parsed.Pragma != nil {
+		p, err := resolvePragma(parsed.Pragma)
+
+		if err != nil {
+			return nil, err
+		}
+
+		if p.value != "" {
+			stmt.execStmt = &ExecStmt{pragmaStmt: p}
+		} else {
+			stmt.queryStmt = &QueryStmt{pragmaStmt: p}
 		}
 	}
 

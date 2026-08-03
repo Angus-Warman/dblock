@@ -43,3 +43,33 @@ func NewFullScanner(tree *Tree, columns []string) (Scanner, error) {
 		columns: columns,
 	}, nil
 }
+
+// PragmaScanner yields a single row holding one pragma value.
+type PragmaScanner struct {
+	columns []string
+	value   any
+	done    bool
+}
+
+func newPragmaScanner(columns []string, value any) Scanner {
+	return &PragmaScanner{
+		columns: columns,
+		value:   value,
+	}
+}
+
+// Columns implements [Scanner].
+func (s *PragmaScanner) Columns() []string {
+	return s.columns
+}
+
+// Next implements [Scanner].
+func (s *PragmaScanner) Next() (key []byte, row Row, ok bool, err error) {
+	if s.done {
+		return nil, Row{}, false, nil
+	}
+
+	s.done = true
+
+	return nil, Row{Values: []any{s.value}}, true, nil
+}

@@ -2,6 +2,7 @@ package internal
 
 import (
 	"dblock2/internal/parser"
+	"dblock2/internal/pragma"
 	"encoding/hex"
 	"fmt"
 	"strconv"
@@ -9,6 +10,22 @@ import (
 
 	"github.com/google/uuid"
 )
+
+func resolveSelect(parsed *parser.SelectStmt) (*QueryStmt, error) {
+	if parsed.TableName == "" {
+		return nil, fmt.Errorf("table name empty")
+	}
+
+	sel := &SelectStmt{
+		tableName: parsed.TableName,
+	}
+
+	queryStmt := &QueryStmt{
+		selectStmt: sel,
+	}
+
+	return queryStmt, nil
+}
 
 func resolveCreate(parsed *parser.CreateStmt) (*ExecStmt, error) {
 	columns := make([]Column, len(parsed.Columns))
@@ -50,6 +67,19 @@ func resolveInsert(parsed *parser.InsertStmt) (*ExecStmt, error) {
 		},
 	}
 	return execStmt, nil
+}
+
+func resolvePragma(parsed *parser.PragmaStmt) (*PragmaStmt, error) {
+	property, err := pragma.Parse(parsed.Property)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &PragmaStmt{
+		property: property,
+		value:    parsed.Value,
+	}, nil
 }
 
 func toAny(parsed parser.Value) (any, error) {
