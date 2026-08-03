@@ -1,4 +1,4 @@
-//go:build linux || darwin
+//go:build windows
 
 package storage
 
@@ -6,12 +6,18 @@ import (
 	"fmt"
 	"os"
 
-	"golang.org/x/sys/unix"
+	"golang.org/x/sys/windows"
 )
 
 type DiskFile struct {
 	f *os.File
 }
+
+// lockFileMax is used as the length for LockFileEx when locking "the whole
+// file" — Windows byte-range locks need an explicit length, and since we
+// don't know the eventual file size up front, we lock an effectively
+// unbounded range (matches the whole-file semantics of flock on Linux).
+const lockFileMax = ^uint32(0) // 0xFFFFFFFF
 
 func OpenDiskFile(path string) (*DiskFile, error) {
 	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0o644)
@@ -19,21 +25,36 @@ func OpenDiskFile(path string) (*DiskFile, error) {
 		return nil, err
 	}
 
-	if err := unix.Flock(int(f.Fd()), unix.LOCK_EX|unix.LOCK_NB); err != nil {
+	handle := windows.Handle(f.Fd())
+
+	ol := new(windows.Overlapped) // offset 0, locking from the start of the file
+
+	err = windows.LockFileEx(
+		handle,
+		windows.LOCKFILE_EXCLUSIVE_LOCK|windows.LOCKFILE_FAIL_IMMEDIATELY,
+		0,
+		lockFileMax,
+		lockFileMax,
+		ol,
+	)
+	if err != nil {
 		f.Close()
-		if err == unix.EWOULDBLOCK {
+		if err == windows.ERROR_LOCK_VIOLATION {
 			return nil, fmt.Errorf("OpenDiskFile: %s is locked by another process", path)
 		}
-		return nil, fmt.Errorf("OpenDiskFile: flock failed: %w", err)
+		return nil, fmt.Errorf("OpenDiskFile: LockFileEx failed: %w", err)
 	}
 
 	return &DiskFile{f: f}, nil
 }
 
 func (d *DiskFile) Close() error {
-	// Unlocking is optional, closing the fd releases the flock lock
-	err := unix.Flock(int(d.f.Fd()), unix.LOCK_UN)
+	// Unlocking is optional; closing the handle releases the lock.
+	// Being explicit for parity with the Linux implementation.
+	handle := windows.Handle(d.f.Fd())
+	ol := new(windows.Overlapped)
 
+	err := windows.UnlockFileEx(handle, 0, lockFileMax, lockFileMax, ol)
 	if err != nil {
 		return err
 	}
