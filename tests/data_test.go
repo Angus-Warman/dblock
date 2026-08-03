@@ -1,6 +1,7 @@
 package tests
 
 import (
+	"database/sql"
 	"fmt"
 	"testing"
 	"time"
@@ -17,19 +18,22 @@ func TestTimeRoundtrip(t *testing.T) {
 	mustQueryOne(t, db, "SELECT * FROM foo", []any{now})
 }
 
-func TestUUIDRoundtrip(t *testing.T) {
+func TestUUIDRoundtripA(t *testing.T) {
 	db := openDB(t)
 	mustExec(t, db, "CREATE TABLE foo (id UUID)")
 	original := uuid.New()
 	mustExec(t, db, "INSERT INTO foo VALUES (?)", original)
-	var returned uuid.UUID
-	rows, err := db.Query("SELECT * FROM foo")
-	require.NoError(t, err)
-	rows.Next()
-	err = rows.Scan(&returned)
-	require.NoError(t, err)
-	require.Equal(t, original, returned)
+	mustReturnUUID(t, db, "SELECT * FROM foo", original)
 }
+
+// This test doesn't currently pass, sql.DB cannot materialise a uuid into an *any
+// func TestUUIDRoundtripB(t *testing.T) {
+// 	db := openDB(t)
+// 	mustExec(t, db, "CREATE TABLE foo (id UUID)")
+// 	original := uuid.New()
+// 	mustExec(t, db, "INSERT INTO foo VALUES (?)", original)
+// 	mustQueryOne(t, db, "SELECT * FROM foo", []any{original})
+// }
 
 func TestCatchInvalidData(t *testing.T) {
 	db := openDB(t)
@@ -65,6 +69,34 @@ func TestRoundtripUUIDThroughAny(t *testing.T) {
 	original := uuid.New()
 	mustExec(t, db, "INSERT INTO foo VALUES (?)", original)
 	mustQueryOne(t, db, "SELECT * FROM foo", []any{original})
+}
+
+func mustReturnUUID(t *testing.T, db *sql.DB, query string, original uuid.UUID) {
+	var returned uuid.UUID
+	rows, err := db.Query("SELECT * FROM foo")
+	require.NoError(t, err)
+	rows.Next()
+	err = rows.Scan(&returned)
+	require.NoError(t, err)
+	require.Equal(t, original, returned)
+}
+
+func TestInsertUUIDVariants(t *testing.T) {
+	original := uuid.New()
+	variants := []any{
+		original,
+		original.String(),
+		original[:],
+	}
+
+	for _, variant := range variants {
+		t.Run(fmt.Sprint(variant), func(t *testing.T) {
+			db := openDB(t)
+			mustExec(t, db, "CREATE TABLE foo (id UUID)")
+			mustExec(t, db, "INSERT INTO foo VALUES (?)", variant)
+			mustReturnUUID(t, db, "SELECT * FROM foo", original)
+		})
+	}
 }
 
 func TestDataCoercion(t *testing.T) {
