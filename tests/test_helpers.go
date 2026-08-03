@@ -49,6 +49,15 @@ func mustQueryColumn(t *testing.T, db *sql.DB, query string, colIdx int, expecte
 	require.Equal(t, expectedCol, colVals)
 }
 
+func mustQueryColumnNames(t *testing.T, db *sql.DB, query string, expectedNames []string) {
+	t.Helper()
+	rows, err := db.Query(query)
+	require.NoError(t, err)
+	actualNames, err := rows.Columns()
+	require.NoError(t, err)
+	require.Equal(t, expectedNames, actualNames)
+}
+
 func mustQueryColumnTx(t *testing.T, tx *sql.Tx, query string, colIdx int, expectedCol []any) {
 	t.Helper()
 	rows, err := tx.Query(query)

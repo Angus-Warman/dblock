@@ -31,9 +31,25 @@ type QueryStmt struct {
 type SelectStmt struct {
 	tableName  string
 	projection []ProjectedColumn
+	joins      []JoinStmt
 }
 
 type ProjectedColumn struct {
 	source string
 	alias  string
+}
+
+type JoinStmt struct {
+	tableName string
+	on        JoinOn
+}
+
+type JoinOn struct {
+	left  ColumnRef
+	right ColumnRef
+}
+
+type ColumnRef struct {
+	table  string
+	column string
 }

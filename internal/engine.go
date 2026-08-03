@@ -163,6 +163,20 @@ func (e *Engine) querySelect(stmt *SelectStmt, args []any) (Scanner, error) {
 		return nil, err
 	}
 
+	for _, join := range stmt.joins {
+		right, err := e.SelectAllFromTable(join.tableName)
+
+		if err != nil {
+			return nil, err
+		}
+
+		scanner, err = NewJoinScanner(scanner, right, stmt, &join)
+
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	scanner, err = NewProjectorScanner(scanner, stmt)
 
 	if err != nil {
@@ -195,7 +209,6 @@ var schemaColumns = []string{"object_name", "object_type", "definition", "rootpa
 type tableInfo struct {
 	rootPage PageID
 	columns  []string
-	table    *Table
 }
 
 func (e *Engine) lookupTable(name string) (*tableInfo, error) {
@@ -229,7 +242,6 @@ func (e *Engine) lookupTable(name string) (*tableInfo, error) {
 		return &tableInfo{
 			rootPage: PageID(row.Values[3].(int64)),
 			columns:  colNames,
-			table:    td,
 		}, nil
 	}
 

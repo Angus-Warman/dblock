@@ -22,9 +22,16 @@ func resolveSelect(parsed *parser.SelectStmt) (*QueryStmt, error) {
 		return nil, err
 	}
 
+	joins, err := resolveJoins(parsed.Joins)
+
+	if err != nil {
+		return nil, err
+	}
+
 	sel := &SelectStmt{
 		tableName:  parsed.TableName,
 		projection: projection,
+		joins:      joins,
 	}
 
 	queryStmt := &QueryStmt{
@@ -32,6 +39,32 @@ func resolveSelect(parsed *parser.SelectStmt) (*QueryStmt, error) {
 	}
 
 	return queryStmt, nil
+}
+
+func resolveJoins(parsed []parser.JoinClause) ([]JoinStmt, error) {
+	joins := []JoinStmt{}
+
+	for _, j := range parsed {
+		if j.On == nil {
+			return nil, fmt.Errorf("join without ON clause")
+		}
+
+		joins = append(joins, JoinStmt{
+			tableName: j.Table,
+			on: JoinOn{
+				left: ColumnRef{
+					table:  j.On.Left.Table(),
+					column: j.On.Left.Column(),
+				},
+				right: ColumnRef{
+					table:  j.On.Right.Table(),
+					column: j.On.Right.Column(),
+				},
+			},
+		})
+	}
+
+	return joins, nil
 }
 
 func resolveProjection(items []parser.SelectItem) ([]ProjectedColumn, error) {
