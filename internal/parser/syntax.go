@@ -34,6 +34,7 @@ type ParsedStmt struct {
 	Insert *InsertStmt `parser:"| @@  \";\"?"`
 	Select *SelectStmt `parser:"| @@  \";\"?"`
 	Update *UpdateStmt `parser:"| @@  \";\"?"`
+	Pragma *PragmaStmt `parser:"| @@  \";\"?"`
 }
 
 type IfExistsClause struct {
@@ -226,4 +227,9 @@ type FuncCall struct {
 
 type SelectList struct {
 	Items []SelectItem `parser:"@@ (\",\" @@)*"`
+}
+
+type PragmaStmt struct {
+	Target string `parser:"\"PRAGMA\" @Ident"`
+	Value  string `parser:"(@(Ident|Number))?"`
 }
