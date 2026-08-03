@@ -148,15 +148,98 @@ func NewWalStorage(main File, wal File) (*WalStorage, error) {
 		nextBlockID = n
 	}
 
-	return &WalStorage{
+	s := &WalStorage{
 		walIndex:      make(map[BlockID]WalID),
 		walOffsets:    make(map[WalID]BlockOffset),
 		txUsingWalIDs: make(map[TxID]WalID),
 		main:          main,
 		wal:           wal,
-		maxWalID:      0, // Or read from wal?
+		maxWalID:      0,
 		nextBlockID:   nextBlockID,
-	}, nil
+	}
+
+	if err := s.Recover(); err != nil {
+		return nil, fmt.Errorf("NewWalStorage: %w", err)
+	}
+
+	// Recovered WAL frames may name blocks past main's current size; never
+	// allocate below them either.
+	for id := range s.walIndex {
+		if id >= s.nextBlockID {
+			s.nextBlockID = id + 1
+		}
+	}
+
+	return s, nil
+}
+
+// Recover replays the WAL from the start, validating each frame's checksum,
+// and rebuilds the in-memory index from every frame up to (and including) the
+// last complete commit. Anything after that -- a torn frame, a bad checksum,
+// or a dangling uncommitted frame -- is discarded, so a transaction is only
+// visible once its commit marker has been fully written.
+func (p *WalStorage) Recover() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	p.walIndex = make(map[BlockID]WalID)
+	p.walOffsets = make(map[WalID]BlockOffset)
+	p.maxWalID = 0
+
+	size, err := p.wal.Size()
+
+	if err != nil {
+		return err
+	}
+
+	header := make([]byte, frameHeaderSize)
+	buf := make([]byte, BlockSize)
+	pendingIndex := make(map[BlockID]WalID)
+	pendingOffsets := make(map[WalID]BlockOffset)
+	var offset BlockOffset
+	var lastCommitEnd BlockOffset
+
+	for int64(offset)+frameHeaderSize <= size {
+		if _, err := p.wal.ReadAt(header, int64(offset)); err != nil {
+			break // torn header, stop here
+		}
+
+		blockID := BlockID(binary.BigEndian.Uint64(header[0:8]))
+		commitMarker := binary.BigEndian.Uint64(header[8:16])
+		storedChecksum := uint32(binary.BigEndian.Uint64(header[16:24]))
+
+		if int64(offset)+frameSize > size {
+			break // torn payload, stop here
+		}
+		if _, err := p.wal.ReadAt(buf, int64(offset+frameHeaderSize)); err != nil {
+			break
+		}
+
+		if crc32.ChecksumIEEE(buf) != storedChecksum {
+			break
+		}
+
+		walID := p.maxWalID
+		p.maxWalID++
+		pendingIndex[blockID] = walID
+		pendingOffsets[walID] = offset
+		offset += frameSize
+
+		if commitMarker != 0 {
+			// The transaction is committed: everything accumulated since the
+			// last commit marker is now visible.
+			for id, walID := range pendingIndex {
+				p.walIndex[id] = walID
+			}
+			for walID, off := range pendingOffsets {
+				p.walOffsets[walID] = off
+			}
+			lastCommitEnd = offset
+		}
+	}
+
+	p.walEnd = lastCommitEnd
+	return nil
 }
 
 func (w *WalStorage) NewTxStorage() *TxStorage {

@@ -1,7 +1,10 @@
 package storage
 
 import (
+	"bytes"
+	"encoding/binary"
 	"errors"
+	"hash/crc32"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -134,4 +137,128 @@ func TestCheckpointErrorMidway(t *testing.T) {
 	meta, err := store.GetMetadata()
 	require.NoError(t, err)
 	require.Equal(t, uint32(0), meta.FileChangeCounter)
+}
+
+// makeFrame builds a single WAL frame: header (blockID, commit marker,
+// checksum) followed by a full block of data, as PutBlocks writes it.
+func makeFrame(id BlockID, commit bool, value byte) []byte {
+	header := make([]byte, frameHeaderSize)
+	binary.BigEndian.PutUint64(header[0:8], uint64(id))
+	if commit {
+		binary.BigEndian.PutUint64(header[8:16], 1)
+	}
+	buf := bytes.Repeat([]byte{value}, BlockSize)
+	binary.BigEndian.PutUint64(header[16:24], uint64(crc32.ChecksumIEEE(buf)))
+	return append(header, buf...)
+}
+
+// A crash that tears the WAL mid-transaction must not lose committed data:
+// Recover replays every frame up to the last valid commit and discards the
+// torn transaction that follows it.
+func TestRecoverIgnoresTornTransaction(t *testing.T) {
+	main := OpenMemoryFile(t.Name() + "-main")
+	wal := OpenMemoryFile(t.Name() + "-wal")
+
+	addBlock(t, main, 0, 0xAA)
+
+	store, err := NewWalStorage(main, wal)
+	require.NoError(t, err)
+
+	tx := store.NewTxStorage()
+	tx.PutBlock(0, newBlock(0, 0xBB))
+	require.NoError(t, tx.Commit())
+
+	tx = store.NewTxStorage()
+	tx.PutBlock(1, newBlock(1, 0xCC))
+	require.NoError(t, tx.Commit())
+
+	// Simulate a crash mid-commit: a frame whose payload is torn, so its
+	// stored checksum no longer matches the data.
+	torn := makeFrame(2, true, 0xDD)
+	torn[frameHeaderSize] ^= 0xFF
+	_, err = wal.WriteAt(torn, int64(store.walEnd))
+	require.NoError(t, err)
+
+	// Reopening replays the WAL and recovers both commits, ignoring the torn
+	// frame that follows them.
+	reopened, err := NewWalStorage(main, wal)
+	require.NoError(t, err)
+
+	got, err := reopened.GetBlock(0, reopened.maxWalID)
+	require.NoError(t, err)
+	require.Equal(t, newBlock(0, 0xBB), got)
+
+	got, err = reopened.GetBlock(1, reopened.maxWalID)
+	require.NoError(t, err)
+	require.Equal(t, newBlock(1, 0xCC), got)
+
+	// Nothing past the last valid commit is indexed, walEnd points at the end
+	// of that commit, and the two recovered frames own WalIDs 0 and 1.
+	_, ok := reopened.walIndex[2]
+	require.False(t, ok)
+	require.Equal(t, BlockOffset(2*frameSize), reopened.walEnd)
+	require.Equal(t, WalID(2), reopened.maxWalID)
+}
+
+// Frames appended after the last commit but before a crash - a dangling
+// uncommitted transaction - must not become visible on recovery.
+func TestRecoverDiscardsUncommittedFrames(t *testing.T) {
+	main := OpenMemoryFile(t.Name() + "-main")
+	wal := OpenMemoryFile(t.Name() + "-wal")
+
+	store, err := NewWalStorage(main, wal)
+	require.NoError(t, err)
+
+	tx := store.NewTxStorage()
+	tx.PutBlock(0, newBlock(0, 0xBB))
+	require.NoError(t, tx.Commit())
+
+	// A valid frame for block 1 that never received a commit marker before
+	// the crash.
+	_, err = wal.WriteAt(makeFrame(1, false, 0xCC), int64(store.walEnd))
+	require.NoError(t, err)
+
+	reopened, err := NewWalStorage(main, wal)
+	require.NoError(t, err)
+
+	got, err := reopened.GetBlock(0, reopened.maxWalID)
+	require.NoError(t, err)
+	require.Equal(t, newBlock(0, 0xBB), got)
+
+	_, ok := reopened.walIndex[1]
+	require.False(t, ok)
+	require.Equal(t, BlockOffset(frameSize), reopened.walEnd)
+}
+
+// A torn checkpoint may leave a half-written block in main; recovery must
+// still serve the intact committed version from the WAL.
+func TestRecoverRestoresIntactVersionAfterTornCheckpoint(t *testing.T) {
+	main := openErrorFile(t.Name()+"-main", 1000)
+	wal := openErrorFile(t.Name()+"-wal", 1000)
+
+	store, err := NewWalStorage(main, wal)
+	require.NoError(t, err)
+
+	addBlock(t, main, 0, 0xAA)
+
+	tx := store.NewTxStorage()
+	tx.PutBlock(0, newBlock(0, 0xBB))
+	require.NoError(t, tx.Commit())
+
+	// Crash mid-checkpoint: main's copy of block 0 is left torn.
+	main.errorIn = 0
+	err = store.Checkpoint()
+	require.ErrorIs(t, err, errInjected)
+
+	// Reopening replays the WAL, which still holds the intact committed
+	// version.
+	main.errorIn = 1000
+	wal.errorIn = 1000
+
+	reopened, err := NewWalStorage(main, wal)
+	require.NoError(t, err)
+
+	got, err := reopened.GetBlock(0, reopened.maxWalID)
+	require.NoError(t, err)
+	require.Equal(t, newBlock(0, 0xBB), got)
 }
