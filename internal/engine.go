@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"slices"
 	"strconv"
+	"time"
+
+	"github.com/google/uuid"
 )
 
 type Engine struct {
@@ -209,6 +212,7 @@ var schemaColumns = []string{"object_name", "object_type", "definition", "rootpa
 type tableInfo struct {
 	rootPage PageID
 	columns  []string
+	table    *Table
 }
 
 func (e *Engine) lookupTable(name string) (*tableInfo, error) {
@@ -242,10 +246,63 @@ func (e *Engine) lookupTable(name string) (*tableInfo, error) {
 		return &tableInfo{
 			rootPage: PageID(row.Values[3].(int64)),
 			columns:  colNames,
+			table:    td,
 		}, nil
 	}
 
 	return nil, fmt.Errorf("no such table: %q", name)
+}
+
+func validateValue(col Column, value any) error {
+	if value == nil {
+		if col.dataType == AnyType {
+			return nil
+		}
+
+		return fmt.Errorf("cannot insert null value into column %q, expects %v", col.name, col.dataType)
+	}
+
+	ok := false
+
+	switch col.dataType {
+	case IntegerType:
+		_, ok = value.(int64)
+
+	case RealType:
+		_, ok = value.(float64)
+
+	case TextType:
+		_, ok = value.(string)
+
+	case BoolType:
+		_, ok = value.(bool)
+
+	case BlobType:
+		_, ok = value.([]byte)
+
+	case TimeType:
+		_, ok = value.(time.Time)
+
+	case UUIDType:
+		switch v := value.(type) {
+		case uuid.UUID:
+			ok = true
+		case string:
+			_, err := uuid.Parse(v)
+			ok = err == nil
+		case []byte:
+			ok = len(v) == 16
+		}
+
+	default:
+		return fmt.Errorf("unsupported data type %d", col.dataType)
+	}
+
+	if !ok {
+		return fmt.Errorf("column %q expects %s, got %T", col.name, col.dataType, value)
+	}
+
+	return nil
 }
 
 func (e *Engine) Insert(stmt *InsertStmt, args []any) (insertedID int64, rowsAffected int64, err error) {
@@ -274,6 +331,16 @@ func (e *Engine) Insert(stmt *InsertStmt, args []any) (insertedID int64, rowsAff
 		}
 
 		values = append(values, v)
+	}
+
+	if len(values) != len(info.table.columns) {
+		return -1, -1, fmt.Errorf("Insert: expected %d values, got %d", len(info.table.columns), len(values))
+	}
+
+	for i, col := range info.table.columns {
+		if err := validateValue(col, values[i]); err != nil {
+			return -1, -1, fmt.Errorf("Insert: %w", err)
+		}
 	}
 
 	row := Row{Values: values}

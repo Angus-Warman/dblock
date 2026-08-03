@@ -9,6 +9,7 @@ type DataType uint8
 
 const (
 	NullType DataType = iota + 1
+	AnyType
 	IntegerType
 	RealType
 	TextType
@@ -38,6 +39,8 @@ func GetDataType(d *codec.Decoder) (DataType, error) {
 
 func parseDataType(typeName string) (DataType, error) {
 	switch typeName {
+	case "ANY":
+		return AnyType, nil
 	case "TEXT":
 		return TextType, nil
 	case "INTEGER":
@@ -55,4 +58,29 @@ func parseDataType(typeName string) (DataType, error) {
 	}
 
 	return DataType(0), fmt.Errorf("parseDataType: unknown type %q", typeName)
+}
+
+func (dt DataType) String() string {
+	switch dt {
+	case AnyType:
+		return "ANY"
+	case NullType:
+		return "NULL"
+	case IntegerType:
+		return "INTEGER"
+	case RealType:
+		return "REAL"
+	case TextType:
+		return "TEXT"
+	case BoolType:
+		return "BOOL"
+	case BlobType:
+		return "BLOB"
+	case TimeType:
+		return "TIME"
+	case UUIDType:
+		return "UUID"
+	}
+
+	return "unknown"
 }

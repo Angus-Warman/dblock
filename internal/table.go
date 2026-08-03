@@ -17,7 +17,7 @@ func (t *Table) Encode() []byte {
 
 	e.PutShortStringWithLength(t.name)
 
-	e.PutInt32(int32(len(t.columns)))
+	e.PutAsUint32(len(t.columns))
 
 	for _, col := range t.columns {
 		e.PutShortStringWithLength(col.name)

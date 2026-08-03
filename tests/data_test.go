@@ -29,3 +29,46 @@ func TestUUIDRoundtrip(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, original, returned)
 }
+
+func TestCatchInvalidData(t *testing.T) {
+	db := openDB(t)
+	mustExec(t, db, "CREATE TABLE foo (value REAL)")
+	_, err := db.Exec("INSERT INTO foo VALUES (?)", "bar")
+	require.Error(t, err)
+}
+
+func TestCatchIntegerMismatch(t *testing.T) {
+	db := openDB(t)
+	mustExec(t, db, "CREATE TABLE foo (value INTEGER)")
+	_, err := db.Exec("INSERT INTO foo VALUES (?)", "bar")
+	require.Error(t, err)
+}
+
+func TestCatchTextMismatch(t *testing.T) {
+	db := openDB(t)
+	mustExec(t, db, "CREATE TABLE foo (value TEXT)")
+	_, err := db.Exec("INSERT INTO foo VALUES (?)", 42)
+	require.Error(t, err)
+}
+
+func TestInsertNull(t *testing.T) {
+	db := openDB(t)
+	mustExec(t, db, "CREATE TABLE foo (value INTEGER)")
+	_, err := db.Exec("INSERT INTO foo VALUES (?)", nil)
+	require.Error(t, err)
+}
+
+func TestInsertNullIntoAny(t *testing.T) {
+	db := openDB(t)
+	mustExec(t, db, "CREATE TABLE foo (value ANY)")
+	mustExec(t, db, "INSERT INTO foo VALUES (?)", nil)
+	mustQueryOne(t, db, "SELECT * FROM foo", []any{nil})
+}
+
+func TestSemiRoundtripInt(t *testing.T) {
+	db := openDB(t)
+	mustExec(t, db, "CREATE TABLE foo (value INTEGER)")
+	original := int32(1234)
+	mustExec(t, db, "INSERT INTO foo VALUES (?)", original)
+	mustQueryOne(t, db, "SELECT * FROM foo", []any{int64(1234)})
+}
