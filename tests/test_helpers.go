@@ -133,6 +133,7 @@ func getMetadata(t *testing.T, fp string) *metadata.Metadata {
 	t.Helper()
 	f, err := os.Open(fp)
 	require.NoError(t, err)
+	defer f.Close()
 	buf := make([]byte, 100)
 	f.ReadAt(buf, 0)
 	m, err := metadata.Decode(buf)
