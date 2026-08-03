@@ -84,11 +84,9 @@ func (c *Conn) Begin() (driver.Tx, error) {
 }
 
 func (c *Conn) CheckNamedValue(nv *driver.NamedValue) error {
-	switch v := nv.Value.(type) {
+	switch nv.Value.(type) {
 	case uuid.UUID:
-		b, _ := v.MarshalBinary() // Never fails
-		nv.Value = b
-		return nil
+		return nil // Leave intact
 	default:
 		return driver.ErrSkip
 	}

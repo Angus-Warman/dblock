@@ -59,6 +59,14 @@ func TestInsertNullIntoAny(t *testing.T) {
 	mustQueryOne(t, db, "SELECT * FROM foo", []any{nil})
 }
 
+func TestRoundtripUUIDThroughAny(t *testing.T) {
+	db := openDB(t)
+	mustExec(t, db, "CREATE TABLE foo (id ANY)")
+	original := uuid.New()
+	mustExec(t, db, "INSERT INTO foo VALUES (?)", original)
+	mustQueryOne(t, db, "SELECT * FROM foo", []any{original})
+}
+
 func TestDataCoercion(t *testing.T) {
 	type testCase struct {
 		colType string

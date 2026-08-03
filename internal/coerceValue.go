@@ -85,7 +85,7 @@ func coerceValue(col Column, value any) (any, error) {
 	case UUIDType:
 		switch v := value.(type) {
 		case uuid.UUID:
-			return v, nil
+			return v.String(), nil
 		case string:
 			if _, err := uuid.Parse(v); err == nil {
 				return v, nil
