@@ -18,7 +18,7 @@ var sqlLexer = lexer.MustSimple([]lexer.SimpleRule{
 	{Name: "Ident", Pattern: `[a-zA-Z_][\w]*(?:\.[a-zA-Z_][\w]*)*`},
 	{Name: "String", Pattern: `'[^']*'|"[^"]*"|` + "`[^`]*`"},
 	{Name: "Hex", Pattern: `0x[0-9a-fA-F]+`},
-	{Name: "Number", Pattern: `\d+(?:\.\d+)?`},
+	{Name: "Number", Pattern: `-?\d+(?:\.\d+)?`},
 	{Name: "Arg", Pattern: `\?`},
 	{Name: "Punct", Pattern: `[(),;*+\-/\.]`},
 	{Name: "Cmp", Pattern: `>=|<=|!=|<>|>|<|=`},

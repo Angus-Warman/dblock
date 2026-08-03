@@ -105,13 +105,13 @@ func (e *Engine) execPragma(stmt *PragmaStmt) error {
 
 	switch stmt.property {
 	case pragma.TokenProperty:
-		v, err := strconv.ParseUint(stmt.value, 10, 32)
+		v, err := strconv.ParseInt(stmt.value, 10, 64)
 
 		if err != nil {
 			return fmt.Errorf("execPragma token: %w", err)
 		}
 
-		m.Token = uint32(v)
+		m.Token = v
 
 	case pragma.PageSizeProperty:
 		v, err := strconv.ParseUint(stmt.value, 10, 32)

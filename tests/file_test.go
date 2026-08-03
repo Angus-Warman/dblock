@@ -45,7 +45,7 @@ func TestMetadata(t *testing.T) {
 	require.Equal(t, uint32(0), m.NumberOfPages)
 	require.Equal(t, uint32(2), m.FileVersion)
 	require.Equal(t, uint32(2), m.SchemaVersion)
-	require.Equal(t, uint32(0), m.Token)
+	require.Equal(t, int64(0), m.Token)
 
 	// The file must start with exactly the encoded metadata and no more.
 	require.Equal(t, m.Encode(), buf[:metadata.Length])

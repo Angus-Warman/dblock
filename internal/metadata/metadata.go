@@ -13,14 +13,14 @@ type Metadata struct {
 	SchemaVersion uint32 // 12-15, increments when dblock_schema changed
 	PageSizePower uint8  // 16, PageSize = 2 ^ PageSizePower, default 13 = 8192
 	NumberOfPages uint32 // 17-20
-	Token         uint32 // 21-24
-	// Padding 25-95, 71 bytes
+	Token         int64  // 21-28
+	// Padding 29-95, 67 bytes
 	Checksum uint32 // 96-99
 }
 
 const headerMagic = "dblock01"
 const Length = 100
-const padding = 71
+const padding = 67
 
 func New() *Metadata {
 	m := &Metadata{
@@ -45,7 +45,7 @@ func (m *Metadata) CalculateChecksum() {
 	e.PutUint32(m.SchemaVersion)
 	e.PutUint8(m.PageSizePower)
 	e.PutUint32(m.NumberOfPages)
-	e.PutUint32(m.Token)
+	e.PutInt64(m.Token)
 	e.Pad(padding)
 	checksum := crc32.ChecksumIEEE(e.Bytes())
 
@@ -60,7 +60,7 @@ func (m *Metadata) Encode() []byte {
 	e.PutUint32(m.SchemaVersion)
 	e.PutUint8(m.PageSizePower)
 	e.PutUint32(m.NumberOfPages)
-	e.PutUint32(m.Token)
+	e.PutInt64(m.Token)
 	e.Pad(padding)
 	checksum := crc32.ChecksumIEEE(e.Bytes())
 	e.PutUint32(checksum)
@@ -105,7 +105,7 @@ func Decode(buf []byte) (*Metadata, error) {
 		return nil, err
 	}
 
-	token, err := dec.GetUint32()
+	token, err := dec.GetInt64()
 
 	if err != nil {
 		return nil, err

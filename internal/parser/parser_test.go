@@ -26,3 +26,8 @@ func TestParsePragmaValue(t *testing.T) {
 	require.Equal(t, p.Pragma.Property, "foo")
 	require.Equal(t, p.Pragma.Value, "1")
 }
+
+func TestParseNegativeNumber(t *testing.T) {
+	p := mustParse(t, "INSERT INTO foo VALUES (-1)")
+	require.NotNil(t, p)
+}
