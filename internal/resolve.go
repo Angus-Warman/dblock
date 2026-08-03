@@ -11,14 +11,20 @@ import (
 )
 
 func resolveCreate(parsed *parser.CreateStmt) (*ExecStmt, error) {
-	columns := make([]string, len(parsed.Columns))
+	columns := make([]Column, len(parsed.Columns))
 	for i, c := range parsed.Columns {
-		columns[i] = c.Name
+		dt, err := parseDataType(c.Type)
+
+		if err != nil {
+			return nil, err
+		}
+
+		columns[i] = Column{name: c.Name, dataType: dt}
 	}
 	execStmt := &ExecStmt{
 		createStmt: &CreateStmt{
-			tableName:   parsed.TableName,
-			columnNames: columns,
+			tableName: parsed.TableName,
+			columns:   columns,
 		},
 	}
 	return execStmt, nil

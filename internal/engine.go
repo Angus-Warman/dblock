@@ -179,14 +179,9 @@ func (e *Engine) Insert(stmt *InsertStmt, args []any) (insertedID int64, rowsAff
 }
 
 func (e *Engine) ExecCreate(stmt *CreateStmt) error {
-	columns := make([]Column, len(stmt.columnNames))
-	for i, name := range stmt.columnNames {
-		columns[i] = Column{name: name}
-	}
-
 	def := &TableDefinition{
 		name:    stmt.tableName,
-		columns: columns,
+		columns: stmt.columns,
 	}
 
 	return e.CreateTable(def)

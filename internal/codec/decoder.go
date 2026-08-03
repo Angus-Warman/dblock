@@ -1,4 +1,4 @@
-package internal
+package codec
 
 import (
 	"fmt"
@@ -147,15 +147,4 @@ func (d *Decoder) GetBool() (bool, error) {
 	}
 
 	return val == 1, nil
-}
-
-func (d *Decoder) GetDataType() (DataType, error) {
-	b, err := d.GetUint8()
-
-	if err != nil {
-		return DataType(0), err
-	}
-
-	// TODO: Check is in range
-	return DataType(b), nil
 }

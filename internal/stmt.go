@@ -6,8 +6,8 @@ type ExecStmt struct {
 }
 
 type CreateStmt struct {
-	tableName   string
-	columnNames []string
+	tableName string
+	columns   []Column
 }
 
 type InsertStmt struct {

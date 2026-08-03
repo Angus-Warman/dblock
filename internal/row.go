@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"time"
 
+	"dblock2/internal/codec"
+
 	"github.com/google/uuid"
 )
 
@@ -12,7 +14,7 @@ type Row struct {
 }
 
 func (r *Row) Encode() []byte {
-	e := NewEncoder()
+	e := codec.NewEncoder()
 
 	e.PutAsUint16(len(r.Values))
 
@@ -23,36 +25,36 @@ func (r *Row) Encode() []byte {
 	return e.Bytes()
 }
 
-func EncodeValue(e *Encoder, val any) {
+func EncodeValue(e *codec.Encoder, val any) {
 	if val == nil {
-		e.PutDataType(NullType)
+		PutDataType(e, NullType)
 		return
 	}
 
 	switch v := val.(type) {
 	case int64:
-		e.PutDataType(IntegerType)
+		PutDataType(e, IntegerType)
 		e.PutInt64(v)
 	case float64:
-		e.PutDataType(RealType)
+		PutDataType(e, RealType)
 		e.PutFloat64(v)
 	case string:
-		e.PutDataType(TextType)
+		PutDataType(e, TextType)
 		e.PutStringWithLength(v)
 	case bool:
-		e.PutDataType(BoolType)
+		PutDataType(e, BoolType)
 		e.PutBool(v)
 	case []byte:
-		e.PutDataType(BlobType)
+		PutDataType(e, BlobType)
 		e.PutBytesWithLength(v)
 	case time.Time:
-		e.PutDataType(TimeType)
+		PutDataType(e, TimeType)
 		_, offset := v.Zone()
 		e.PutInt64(v.Unix())
 		e.PutAsUint32(v.Nanosecond())
 		e.PutInt16(int16(offset / 60))
 	case uuid.UUID:
-		e.PutDataType(UUIDType)
+		PutDataType(e, UUIDType)
 		e.PutBytes(v[:])
 	default:
 		panic(fmt.Errorf("no encoding available for %#v %T", val, val))
@@ -62,7 +64,7 @@ func EncodeValue(e *Encoder, val any) {
 func DecodeRow(buf []byte) (Row, error) {
 	var zero Row
 
-	d := NewDecoder(buf)
+	d := codec.NewDecoder(buf)
 
 	count, err := d.GetUint16()
 	if err != nil {
@@ -72,12 +74,12 @@ func DecodeRow(buf []byte) (Row, error) {
 	values := make([]any, count)
 
 	for i := range count {
-		dt, err := d.GetDataType()
+		dt, err := GetDataType(d)
 		if err != nil {
 			return zero, err
 		}
 
-		switch DataType(dt) {
+		switch dt {
 		case NullType:
 			values[i] = nil
 

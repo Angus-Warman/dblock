@@ -1,9 +1,12 @@
-package internal
+package codec
 
 import (
+	"encoding/binary"
 	"fmt"
 	"math"
 )
+
+var LE = binary.LittleEndian
 
 type Encodable interface {
 	Encode() []byte
@@ -126,8 +129,4 @@ func (e *Encoder) Pad(toLength int) {
 
 func (e *Encoder) Bytes() []byte {
 	return e.backing
-}
-
-func (e *Encoder) PutDataType(dt DataType) {
-	e.PutUint8(uint8(dt))
 }

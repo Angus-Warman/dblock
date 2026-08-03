@@ -1,6 +1,10 @@
 package internal
 
-import "fmt"
+import (
+	"fmt"
+
+	"dblock2/internal/codec"
+)
 
 type Metadata struct {
 	Dblock              string // 0-5
@@ -29,7 +33,7 @@ func NewMetadata() *Metadata {
 const MetadataLength = 100
 
 func (m *Metadata) Encode() []byte {
-	e := NewEncoder()
+	e := codec.NewEncoder()
 
 	e.PutBytes([]byte(m.Dblock))
 	e.PutUint16(m.DatabaseVersion)
@@ -44,7 +48,7 @@ func (m *Metadata) Encode() []byte {
 }
 
 func DecodeMetadata(buf []byte) (*Metadata, error) {
-	dec := NewDecoder(buf)
+	dec := codec.NewDecoder(buf)
 
 	magic, err := dec.GetBytes(6)
 

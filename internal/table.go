@@ -1,5 +1,7 @@
 package internal
 
+import "dblock2/internal/codec"
+
 type TableDefinition struct {
 	name    string
 	columns []Column
@@ -10,21 +12,8 @@ type Column struct {
 	dataType DataType
 }
 
-type DataType uint8
-
-const (
-	NullType DataType = iota + 1
-	IntegerType
-	RealType
-	TextType
-	BoolType
-	BlobType
-	TimeType
-	UUIDType
-)
-
 func (t *TableDefinition) Encode() []byte {
-	e := NewEncoder()
+	e := codec.NewEncoder()
 
 	e.PutShortStringWithLength(t.name)
 
@@ -32,14 +21,14 @@ func (t *TableDefinition) Encode() []byte {
 
 	for _, col := range t.columns {
 		e.PutShortStringWithLength(col.name)
-		e.PutDataType(col.dataType)
+		PutDataType(e, col.dataType)
 	}
 
 	return e.Bytes()
 }
 
 func DecodeTableDefinition(buf []byte) (*TableDefinition, error) {
-	d := NewDecoder(buf)
+	d := codec.NewDecoder(buf)
 
 	name, err := d.GetShortStringWithLength()
 
@@ -65,7 +54,7 @@ func DecodeTableDefinition(buf []byte) (*TableDefinition, error) {
 			return nil, err
 		}
 
-		dt, err := d.GetDataType()
+		dt, err := GetDataType(d)
 
 		if err != nil {
 			return nil, err
