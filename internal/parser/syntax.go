@@ -80,7 +80,7 @@ type InsertStmt struct {
 type SelectStmt struct {
 	Select    SelectList     `parser:"\"SELECT\" @@"`
 	TableName string         `parser:"(\"FROM\" @Ident)?"`
-	Alias     string         `parser:"(@Ident)?"`
+	Alias     string         `parser:"((\"AS\")? @Ident)?"`
 	Joins     []JoinClause   `parser:"(@@)*"`
 	Where     *WhereClause   `parser:"(@@)?"`
 	GroupBy   *GroupByClause `parser:"(@@)?"`
@@ -91,7 +91,7 @@ type SelectStmt struct {
 
 type JoinClause struct {
 	Table string  `parser:"\"JOIN\" @Ident"`
-	Alias string  `parser:"(@Ident)?"`
+	Alias string  `parser:"((\"AS\")? @Ident)?"`
 	On    *JoinOn `parser:"@@"`
 }
 

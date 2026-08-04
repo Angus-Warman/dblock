@@ -65,5 +65,15 @@ func TestJoinMultipleRows(t *testing.T) {
 	mustExec(t, db, "INSERT INTO bar VALUES ('w', '20')")
 	rows, err := db.Query("SELECT * FROM foo JOIN bar ON foo.b = bar.b")
 	require.NoError(t, err)
-	require.Equal(t, [][]any{{"2", "y", "10"}}, getRows(t, rows))
+	require.Equal(t, [][]any{{"2", "y", "10"}}, getValues(t, rows))
+}
+
+func TestSelectOrderBy(t *testing.T) {
+	db := openDB(t)
+	mustExec(t, db, "CREATE TABLE foo (a TEXT, b TEXT)")
+	mustExec(t, db, "INSERT INTO foo VALUES ('2', 'x')")
+	mustExec(t, db, "INSERT INTO foo VALUES ('1', 'y')")
+	mustExec(t, db, "INSERT INTO foo VALUES ('3', 'z')")
+
+	mustRows(t, db, "SELECT * FROM foo ORDER BY a", [][]any{{"1", "y"}, {"2", "x"}, {"3", "z"}})
 }

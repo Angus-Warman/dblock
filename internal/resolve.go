@@ -28,10 +28,17 @@ func resolveSelect(parsed *parser.SelectStmt) (*QueryStmt, error) {
 		return nil, err
 	}
 
+	orders, err := resolveOrders(parsed.OrderBy, parsed.TableName, parsed.Alias)
+
+	if err != nil {
+		return nil, err
+	}
+
 	sel := &SelectStmt{
 		tableName:  parsed.TableName,
 		projection: projection,
 		joins:      joins,
+		orders:     orders,
 	}
 
 	queryStmt := &QueryStmt{
@@ -65,6 +72,29 @@ func resolveJoins(parsed []parser.JoinClause) ([]JoinStmt, error) {
 	}
 
 	return joins, nil
+}
+
+func resolveOrders(parsed *parser.OrderByClause, tableName, alias string) ([]ColumnRef, error) {
+	if parsed == nil {
+		return nil, nil
+	}
+
+	orders := []ColumnRef{}
+
+	for _, item := range parsed.Items {
+		ref := parser.ColumnAlias(item.Column)
+
+		table := ref.Table()
+		column := ref.Column()
+
+		if table == alias {
+			table = tableName
+		}
+
+		orders = append(orders, ColumnRef{table: table, column: column})
+	}
+
+	return orders, nil
 }
 
 func resolveProjection(items []parser.SelectItem) ([]ProjectedColumn, error) {

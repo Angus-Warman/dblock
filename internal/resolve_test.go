@@ -59,3 +59,35 @@ func TestToAnyInvalid(t *testing.T) {
 		})
 	}
 }
+
+func mustParse(t *testing.T, query string) *parser.ParsedStmt {
+	t.Helper()
+	p, err := parser.Parse(query)
+	require.NoError(t, err)
+	return p
+}
+
+func mustSelect(t *testing.T, query string) *SelectStmt {
+	t.Helper()
+	parsed := mustParse(t, query)
+	require.NotNil(t, parsed.Select)
+	stmt, err := resolveSelect(parsed.Select)
+	require.NoError(t, err)
+	require.NotNil(t, stmt.selectStmt)
+	return stmt.selectStmt
+}
+
+func TestResolveTableNameAlias(t *testing.T) {
+	s := mustSelect(t, "SELECT * FROM foo f")
+	require.Equal(t, s.tableName, "foo")
+	s = mustSelect(t, "SELECT * FROM foo AS f")
+	require.Equal(t, s.tableName, "foo")
+}
+
+func TestResolveColumnAlias(t *testing.T) {
+	s := mustSelect(t, "SELECT * FROM foo AS f ORDER BY f.bar")
+	require.Equal(t, s.tableName, "foo")
+	require.Len(t, s.orders, 1)
+	require.Equal(t, s.orders[0].table, "foo")
+	require.Equal(t, s.orders[0].column, "bar")
+}

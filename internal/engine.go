@@ -177,6 +177,14 @@ func (e *Engine) querySelect(stmt *SelectStmt, args []any) (Scanner, error) {
 		}
 	}
 
+	if len(stmt.orders) > 0 {
+		scanner, err = NewOrderScanner(scanner, stmt)
+
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	scanner, err = NewProjectorScanner(scanner, stmt)
 
 	if err != nil {

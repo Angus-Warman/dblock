@@ -36,7 +36,7 @@ func mustQueryOne(t *testing.T, db *sql.DB, query string, expectedRow []any) {
 	t.Helper()
 	rows, err := db.Query(query)
 	require.NoError(t, err)
-	rowVals := getRows(t, rows)
+	rowVals := getValues(t, rows)
 	require.Len(t, rowVals, 1)
 	require.Equal(t, expectedRow, rowVals[0])
 }
@@ -69,7 +69,7 @@ func mustQueryColumnTx(t *testing.T, tx *sql.Tx, query string, colIdx int, expec
 func getColumn(t *testing.T, rows *sql.Rows, colIdx int) []any {
 	t.Helper()
 
-	rowValues := getRows(t, rows)
+	rowValues := getValues(t, rows)
 
 	colValues := []any{}
 
@@ -81,7 +81,7 @@ func getColumn(t *testing.T, rows *sql.Rows, colIdx int) []any {
 	return colValues
 }
 
-func getRows(t *testing.T, rows *sql.Rows) [][]any {
+func getValues(t *testing.T, rows *sql.Rows) [][]any {
 	t.Helper()
 
 	colNames, err := rows.Columns()
@@ -155,4 +155,12 @@ func mustColumns(t *testing.T, rows *sql.Rows) []string {
 	cols, err := rows.Columns()
 	require.NoError(t, err)
 	return cols
+}
+
+func mustRows(t *testing.T, db *sql.DB, query string, expectedValues [][]any) {
+	t.Helper()
+	rows, err := db.Query(query)
+	require.NoError(t, err)
+	values := getValues(t, rows)
+	require.Equal(t, expectedValues, values)
 }

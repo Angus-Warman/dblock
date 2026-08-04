@@ -32,6 +32,7 @@ type SelectStmt struct {
 	tableName  string
 	projection []ProjectedColumn
 	joins      []JoinStmt
+	orders     []ColumnRef
 }
 
 type ProjectedColumn struct {
