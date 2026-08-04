@@ -48,6 +48,25 @@ func resolveSelect(parsed *parser.SelectStmt) (*QueryStmt, error) {
 	return queryStmt, nil
 }
 
+func parseJoinMode(s string) (JoinMode, error) {
+	mode := JoinMode(s)
+
+	switch mode {
+	case InnerJoin, LeftOuterJoin, RightOuterJoin, FullOuterJoin, CrossJoin:
+		return mode, nil
+	case BareJoin:
+		return InnerJoin, nil
+	case LeftJoin:
+		return LeftOuterJoin, nil
+	case RightJoin:
+		return RightOuterJoin, nil
+	case FullJoin:
+		return FullOuterJoin, nil
+	}
+
+	return mode, fmt.Errorf("join: could not parse %q as join type", s)
+}
+
 func resolveJoins(parsed []parser.JoinClause) ([]JoinStmt, error) {
 	joins := []JoinStmt{}
 
@@ -56,8 +75,15 @@ func resolveJoins(parsed []parser.JoinClause) ([]JoinStmt, error) {
 			return nil, fmt.Errorf("join without ON clause")
 		}
 
+		mode, err := parseJoinMode(j.Mode)
+
+		if err != nil {
+			return nil, err
+		}
+
 		joins = append(joins, JoinStmt{
 			tableName: j.Table,
+			mode:      mode,
 			on: JoinOn{
 				left: ColumnRef{
 					table:  j.On.Left.Table(),

@@ -1,6 +1,8 @@
 package tests
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -50,8 +52,8 @@ func TestJoinTables(t *testing.T) {
 	mustExec(t, db, "INSERT INTO foo VALUES ('1', '2')")
 	mustExec(t, db, "CREATE TABLE bar (b TEXT, c TEXT)")
 	mustExec(t, db, "INSERT INTO bar VALUES ('2', '3')")
-	mustQueryOne(t, db, "SELECT * FROM foo JOIN bar ON foo.b = bar.b", []any{"1", "2", "3"})
-	mustQueryColumnNames(t, db, "SELECT * FROM foo JOIN bar ON foo.b = bar.b", []string{"foo.a", "b", "bar.c"})
+	mustQueryOne(t, db, "SELECT * FROM foo JOIN bar ON foo.b = bar.b", []any{"1", "2", "2", "3"})
+	mustQueryColumnNames(t, db, "SELECT * FROM foo JOIN bar ON foo.b = bar.b", []string{"foo.a", "foo.b", "bar.b", "bar.c"})
 }
 
 func TestJoinMultipleRows(t *testing.T) {
@@ -65,7 +67,7 @@ func TestJoinMultipleRows(t *testing.T) {
 	mustExec(t, db, "INSERT INTO bar VALUES ('w', '20')")
 	rows, err := db.Query("SELECT * FROM foo JOIN bar ON foo.b = bar.b")
 	require.NoError(t, err)
-	require.Equal(t, [][]any{{"2", "y", "10"}}, getValues(t, rows))
+	require.Equal(t, [][]any{{"2", "y", "y", "10"}}, getValues(t, rows))
 }
 
 func TestSelectOrderBy(t *testing.T) {
@@ -76,4 +78,48 @@ func TestSelectOrderBy(t *testing.T) {
 	mustExec(t, db, "INSERT INTO foo VALUES ('3', 'z')")
 
 	mustRows(t, db, "SELECT * FROM foo ORDER BY a", [][]any{{"1", "y"}, {"2", "x"}, {"3", "z"}})
+}
+
+func TestSelectMany(t *testing.T) {
+	db := openDB(t)
+
+	numTables := 10
+	numCols := 10
+	numRows := 10
+
+	for tIdx := 0; tIdx < numTables; tIdx++ {
+		colDefs := make([]string, numCols)
+
+		for cIdx := range numCols {
+			colDefs[cIdx] = fmt.Sprintf("c%d TEXT", cIdx)
+		}
+
+		mustExec(t, db, fmt.Sprintf("CREATE TABLE t%d (%s)", tIdx, strings.Join(colDefs, ", ")))
+
+		values := make([]string, numCols)
+
+		for cIdx := range numCols {
+			values[cIdx] = fmt.Sprintf("'v%d'", cIdx)
+		}
+
+		for range numRows {
+			mustExec(t, db, fmt.Sprintf("INSERT INTO t%d VALUES (%s)", tIdx, strings.Join(values, ", ")))
+		}
+	}
+
+	for tIdx := range numTables {
+		expectedRow := make([]any, numCols)
+
+		for cIdx := range numCols {
+			expectedRow[cIdx] = fmt.Sprintf("v%d", cIdx)
+		}
+
+		expectedRows := make([][]any, numRows)
+
+		for rIdx := range numRows {
+			expectedRows[rIdx] = expectedRow
+		}
+
+		mustRows(t, db, fmt.Sprintf("SELECT * FROM t%d", tIdx), expectedRows)
+	}
 }

@@ -40,9 +40,24 @@ type ProjectedColumn struct {
 	alias  string
 }
 
+type JoinMode string
+
+const (
+	BareJoin       JoinMode = "" // resolves to INNER
+	InnerJoin      JoinMode = "INNER"
+	LeftJoin       JoinMode = "LEFT" // resolves to RIGHT OUTER
+	LeftOuterJoin  JoinMode = "LEFT OUTER"
+	RightJoin      JoinMode = "RIGHT" // resolves to RIGHT OUTER
+	RightOuterJoin JoinMode = "RIGHT OUTER"
+	FullJoin       JoinMode = "FULL" // resolves to FULL OUTER
+	FullOuterJoin  JoinMode = "FULL OUTER"
+	CrossJoin      JoinMode = "CROSS" /// not currently implemented
+)
+
 type JoinStmt struct {
 	tableName string
 	on        JoinOn
+	mode      JoinMode
 }
 
 type JoinOn struct {

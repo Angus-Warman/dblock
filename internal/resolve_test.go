@@ -91,3 +91,59 @@ func TestResolveColumnAlias(t *testing.T) {
 	require.Equal(t, s.orders[0].table, "foo")
 	require.Equal(t, s.orders[0].column, "bar")
 }
+
+func TestResolveJoins(t *testing.T) {
+	type testcase struct {
+		query string
+		mode  JoinMode
+	}
+
+	testcases := []testcase{
+		{
+			query: "SELECT * FROM foo JOIN bar ON foo.id = bar.id",
+			mode:  InnerJoin,
+		},
+		{
+			query: "SELECT * FROM foo INNER JOIN bar ON foo.id = bar.id",
+			mode:  InnerJoin,
+		},
+		{
+			query: "SELECT * FROM foo LEFT JOIN bar ON foo.id = bar.id",
+			mode:  LeftOuterJoin,
+		},
+		{
+			query: "SELECT * FROM foo LEFT OUTER JOIN bar ON foo.id = bar.id",
+			mode:  LeftOuterJoin,
+		},
+		{
+			query: "SELECT * FROM foo RIGHT JOIN bar ON foo.id = bar.id",
+			mode:  RightOuterJoin,
+		},
+		{
+			query: "SELECT * FROM foo RIGHT OUTER JOIN bar ON foo.id = bar.id",
+			mode:  RightOuterJoin,
+		},
+		{
+			query: "SELECT * FROM foo FULL JOIN bar ON foo.id = bar.id",
+			mode:  FullOuterJoin,
+		},
+		{
+			query: "SELECT * FROM foo FULL OUTER JOIN bar ON foo.id = bar.id",
+			mode:  FullOuterJoin,
+		},
+		{
+			query: "SELECT * FROM foo CROSS JOIN bar ON foo.id = bar.id",
+			mode:  CrossJoin,
+		},
+	}
+
+	for _, tc := range testcases {
+		t.Run(tc.query, func(t *testing.T) {
+			s := mustSelect(t, tc.query)
+			require.Equal(t, s.tableName, "foo")
+			require.Len(t, s.joins, 1)
+			require.Equal(t, s.joins[0].mode, tc.mode)
+		})
+	}
+
+}

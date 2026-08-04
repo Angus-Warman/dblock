@@ -205,6 +205,40 @@ func (t *Tree) splitLeaf(leaf *Page, path []pathEntry) error {
 		Values:   append([][]byte{}, leaf.Values[mid:]...),
 		NextLeaf: leaf.NextLeaf,
 	}
+
+	if len(path) == 0 {
+		// Splitting the root leaf: keep the root page ID stable by rewriting
+		// it as an internal node and moving the left half to a fresh page, so
+		// the schema's rootpage pointer never goes stale.
+		newLeftID := t.pager.NextID()
+		left := &Page{
+			ID:       newLeftID,
+			IsLeaf:   true,
+			NumKeys:  uint16(mid),
+			Keys:     append([][]byte{}, leaf.Keys[:mid]...),
+			Values:   append([][]byte{}, leaf.Values[:mid]...),
+			NextLeaf: rightID,
+		}
+
+		if err := t.savePage(left); err != nil {
+			return err
+		}
+
+		if err := t.savePage(right); err != nil {
+			return err
+		}
+
+		root := &Page{
+			ID:       t.rootID,
+			IsLeaf:   false,
+			NumKeys:  1,
+			Keys:     [][]byte{right.Keys[0]},
+			Children: []PageID{newLeftID, rightID},
+		}
+
+		return t.savePage(root)
+	}
+
 	leaf.Keys = leaf.Keys[:mid]
 	leaf.Values = leaf.Values[:mid]
 	leaf.NextLeaf = rightID
@@ -222,19 +256,28 @@ func (t *Tree) splitLeaf(leaf *Page, path []pathEntry) error {
 
 func (t *Tree) insertIntoParent(leftID PageID, key []byte, rightID PageID, path []pathEntry) error {
 	if len(path) == 0 {
-		newRootID := t.pager.NextID()
+		// The old root (leftID) split and its left half was already saved.
+		// Keep the root page ID stable: move the left half to a fresh page and
+		// rewrite the old root page as the new internal root, so the schema's
+		// rootpage pointer never goes stale.
+		newLeftID := t.pager.NextID()
+		left, err := t.loadPage(leftID)
+		if err != nil {
+			return err
+		}
+		left.ID = newLeftID
+		if err := t.savePage(left); err != nil {
+			return err
+		}
+
 		newRoot := &Page{
-			ID:       newRootID,
+			ID:       t.rootID,
 			IsLeaf:   false,
 			NumKeys:  1,
 			Keys:     [][]byte{key},
-			Children: []PageID{leftID, rightID},
+			Children: []PageID{newLeftID, rightID},
 		}
-		if err := t.savePage(newRoot); err != nil {
-			return err
-		}
-		t.rootID = newRootID
-		return nil
+		return t.savePage(newRoot)
 	}
 
 	parentEntry := path[len(path)-1]

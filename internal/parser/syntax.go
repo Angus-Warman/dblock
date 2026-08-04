@@ -9,7 +9,7 @@ import (
 
 var sqlLexer = lexer.MustSimple([]lexer.SimpleRule{
 	{Name: "ws", Pattern: `\s+`},
-	{Name: "Keyword", Pattern: `CREATE|TABLE|PRIMARY|KEY|UNIQUE|INSERT|INTO|VALUES|SELECT|FROM|WHERE|IF|NOT|EXISTS|UPDATE|SET|GROUP|ORDER|ASC|DESC|AND|OR|AS|LIMIT|OFFSET|JOIN|ON|ALTER|RENAME|COLUMN|TO`},
+	{Name: "Keyword", Pattern: `CREATE|TABLE|PRIMARY|KEY|UNIQUE|INSERT|INTO|VALUES|SELECT|FROM|WHERE|IF|NOT|EXISTS|UPDATE|SET|GROUP|ORDER|ASC|DESC|AND|OR|AS|LIMIT|OFFSET|JOIN|INNER|OUTER|LEFT|RIGHT|FULL|CROSS|ON|ALTER|RENAME|COLUMN|TO`},
 	{Name: "TypeName", Pattern: `TEXT|INTEGER|REAL|BLOB|BOOL|TIME|UUID|ANY`},
 	{Name: "True", Pattern: `TRUE`},
 	{Name: "False", Pattern: `FALSE`},
@@ -90,6 +90,7 @@ type SelectStmt struct {
 }
 
 type JoinClause struct {
+	Mode  string  `parser:"(@(\"INNER\"|\"LEFT\"|\"RIGHT\"|\"FULL\"|\"CROSS\") \"OUTER\"?)?"`
 	Table string  `parser:"\"JOIN\" @Ident"`
 	Alias string  `parser:"((\"AS\")? @Ident)?"`
 	On    *JoinOn `parser:"@@"`
