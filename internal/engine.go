@@ -177,6 +177,14 @@ func (e *Engine) querySelect(stmt *SelectStmt, args []any) (Scanner, error) {
 		}
 	}
 
+	if stmt.where != nil {
+		scanner, err = NewFilterScanner(scanner, stmt.where)
+
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	if len(stmt.orders) > 0 {
 		scanner, err = NewOrderScanner(scanner, stmt)
 

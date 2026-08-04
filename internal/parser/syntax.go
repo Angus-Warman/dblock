@@ -9,19 +9,21 @@ import (
 
 var sqlLexer = lexer.MustSimple([]lexer.SimpleRule{
 	{Name: "ws", Pattern: `\s+`},
-	{Name: "Keyword", Pattern: `CREATE|TABLE|PRIMARY|KEY|UNIQUE|INSERT|INTO|VALUES|SELECT|FROM|WHERE|IF|NOT|EXISTS|UPDATE|SET|GROUP|ORDER|ASC|DESC|AND|OR|AS|LIMIT|OFFSET|JOIN|INNER|OUTER|LEFT|RIGHT|FULL|CROSS|ON|ALTER|RENAME|COLUMN|TO`},
+	{Name: "Keyword", Pattern: `CREATE|TABLE|PRIMARY|KEY|UNIQUE|INSERT|INTO|VALUES|SELECT|FROM|WHERE|IF|NOT|EXISTS|UPDATE|SET|GROUP|ORDER|ASC|DESC|AS|LIMIT|OFFSET|JOIN|INNER|OUTER|LEFT|RIGHT|FULL|CROSS|ON|ALTER|RENAME|COLUMN|TO`},
 	{Name: "TypeName", Pattern: `TEXT|INTEGER|REAL|BLOB|BOOL|TIME|UUID|ANY`},
 	{Name: "True", Pattern: `TRUE`},
 	{Name: "False", Pattern: `FALSE`},
 	{Name: "Null", Pattern: `NULL`},
 	{Name: "Uuid", Pattern: `[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}`},
+	{Name: "Logic", Pattern: `AND|OR`},
 	{Name: "Ident", Pattern: `[a-zA-Z_][\w]*(?:\.[a-zA-Z_][\w]*)*`},
 	{Name: "String", Pattern: `'[^']*'|"[^"]*"|` + "`[^`]*`"},
 	{Name: "Hex", Pattern: `0x[0-9a-fA-F]+`},
 	{Name: "Number", Pattern: `-?\d+(?:\.\d+)?`},
 	{Name: "Arg", Pattern: `\?`},
-	{Name: "Punct", Pattern: `[(),;*+\-/\.]`},
-	{Name: "Cmp", Pattern: `>=|<=|!=|<>|>|<|=`},
+	{Name: "Punct", Pattern: `[(),;\.]`},
+	{Name: "Op", Pattern: `[*+\-%/]`},
+	{Name: "Cmp", Pattern: `>=|<=|<>|!=|>|<|=`},
 })
 
 var sqlParser = participle.MustBuild[ParsedStmt](
@@ -78,7 +80,7 @@ type InsertStmt struct {
 }
 
 type SelectStmt struct {
-	Select    SelectList     `parser:"\"SELECT\" @@"`
+	List      SelectList     `parser:"\"SELECT\" @@"`
 	TableName string         `parser:"(\"FROM\" @Ident)?"`
 	Alias     string         `parser:"((\"AS\")? @Ident)?"`
 	Joins     []JoinClause   `parser:"(@@)*"`
@@ -97,9 +99,7 @@ type JoinClause struct {
 }
 
 type JoinOn struct {
-	Left  ColumnAlias `parser:"\"ON\" @Ident"`
-	Op    string      `parser:"\"=\""`
-	Right ColumnAlias `parser:"@Ident"`
+	Expr Expr `parser:"\"ON\" @@"`
 }
 
 type ColumnAlias string
@@ -147,17 +147,7 @@ type ParsedColumn struct {
 }
 
 type WhereClause struct {
-	Column     ColumnAlias `parser:"\"WHERE\" @Ident"`
-	Op         string      `parser:"@Cmp"`
-	Value      Value       `parser:"@@"`
-	Conditions []Condition `parser:"(@@)*"`
-}
-
-type Condition struct {
-	Bool   string      `parser:"@(\"AND\" | \"OR\")"`
-	Column ColumnAlias `parser:"@Ident"`
-	Op     string      `parser:"@Cmp"`
-	Value  Value       `parser:"@@"`
+	Expr Expr `parser:"\"WHERE\" @@"`
 }
 
 type GroupByClause struct {
@@ -197,28 +187,19 @@ type SelectItem struct {
 	Alias string `parser:"(\"AS\" @Ident)?"`
 }
 
-// Handles + and -
 type Expr struct {
-	Left  *Term  `parser:"@@"`
-	Op    string `parser:"( @(\"+\"|\"-\")"`
-	Right *Term  `parser:"  @@ )*"`
-}
-
-// Handles * and /
-type Term struct {
-	Left  *Factor `parser:"@@"`
-	Op    string  `parser:"( @(\"*\"|\"/\")"`
-	Right *Factor `parser:"  @@ )*"`
+	Factors []Factor `parser:"(@@)*"`
 }
 
 type Factor struct {
 	Star    bool      `parser:"  @\"*\""`
 	Func    *FuncCall `parser:"| @@"`
-	Column  string    `parser:"| @Ident"`
+	SubExpr *Expr     `parser:"| \"(\" @@ \")\""`
 	Num     string    `parser:"| @Number"`
 	Hex     string    `parser:"| @Hex"`
 	Str     string    `parser:"| @String"`
-	SubExpr *Expr     `parser:"| \"(\" @@ \")\""`
+	Op      string    `parser:"| @Op | @Cmp | @Logic"`
+	Column  string    `parser:"| @Ident"`
 }
 
 type FuncCall struct {

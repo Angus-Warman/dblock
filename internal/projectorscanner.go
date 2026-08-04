@@ -8,6 +8,7 @@ import (
 type ProjectorScanner struct {
 	base       Scanner
 	columnIdx  []int
+	exprs      []*Expr
 	outColumns []string
 }
 
@@ -24,10 +25,21 @@ func (p *ProjectorScanner) Next() (key []byte, row Row, ok bool, err error) {
 		return nil, Row{}, ok, err
 	}
 
-	values := make([]any, len(p.columnIdx))
+	columns := p.base.Columns()
+	values := make([]any, len(p.outColumns))
 
-	for i, idx := range p.columnIdx {
-		values[i] = fullRow.Values[idx]
+	for i := range values {
+		if p.exprs[i] != nil {
+			values[i], err = evalExpr(p.exprs[i], columns, fullRow.Values)
+
+			if err != nil {
+				return nil, Row{}, false, err
+			}
+
+			continue
+		}
+
+		values[i] = fullRow.Values[p.columnIdx[i]]
 	}
 
 	return key, Row{Values: values}, true, nil
@@ -54,32 +66,48 @@ func NewProjectorScanner(base Scanner, stmt *SelectStmt) (Scanner, error) {
 		return &ProjectorScanner{
 			base:       base,
 			columnIdx:  indices,
+			exprs:      make([]*Expr, len(columns)),
 			outColumns: columns,
 		}, nil
 	}
 
-	indices := make([]int, len(stmt.projection))
-	aliasedColumns := make([]string, len(stmt.projection))
+	columnIdx := make([]int, len(stmt.projection))
+	exprs := make([]*Expr, len(stmt.projection))
+	outColumns := make([]string, len(stmt.projection))
 
 	for i, proj := range stmt.projection {
+		if proj.expr != nil {
+			columnIdx[i] = -1
+			exprs[i] = proj.expr
+
+			if proj.alias != "" {
+				outColumns[i] = proj.alias
+			} else {
+				outColumns[i] = exprString(proj.expr)
+			}
+
+			continue
+		}
+
 		idx := slices.Index(columns, proj.source)
 
 		if idx < 0 {
 			return nil, fmt.Errorf("projector: no such column %q", proj.source)
 		}
 
-		indices[i] = idx
+		columnIdx[i] = idx
 
 		if proj.alias != "" {
-			aliasedColumns[i] = proj.alias
+			outColumns[i] = proj.alias
 		} else {
-			aliasedColumns[i] = proj.source
+			outColumns[i] = proj.source
 		}
 	}
 
 	return &ProjectorScanner{
 		base:       base,
-		columnIdx:  indices,
-		outColumns: aliasedColumns,
+		columnIdx:  columnIdx,
+		exprs:      exprs,
+		outColumns: outColumns,
 	}, nil
 }

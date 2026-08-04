@@ -2,6 +2,23 @@ package tests
 
 import "testing"
 
+func TestJoinOnExpression(t *testing.T) {
+	db := openDB(t)
+
+	mustExec(t, db, "CREATE TABLE foo (a INTEGER, b INTEGER)")
+	mustExec(t, db, "INSERT INTO foo VALUES (1, 10)")
+	mustExec(t, db, "INSERT INTO foo VALUES (5, 50)")
+
+	mustExec(t, db, "CREATE TABLE bar (c INTEGER)")
+	mustExec(t, db, "INSERT INTO bar VALUES (2)")
+	mustExec(t, db, "INSERT INTO bar VALUES (6)")
+
+	mustRows(t, db, "SELECT * FROM foo JOIN bar ON foo.a + 1 = bar.c", [][]any{
+		{int64(1), int64(10), int64(2)},
+		{int64(5), int64(50), int64(6)},
+	})
+}
+
 func TestJoinModes(t *testing.T) {
 	db := openDB(t)
 

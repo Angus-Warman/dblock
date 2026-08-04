@@ -16,7 +16,7 @@ func resolveSelect(parsed *parser.SelectStmt) (*QueryStmt, error) {
 		return nil, fmt.Errorf("table name empty")
 	}
 
-	projection, err := resolveProjection(parsed.Select.Items)
+	projection, err := resolveProjection(parsed.List.Items)
 
 	if err != nil {
 		return nil, err
@@ -34,11 +34,18 @@ func resolveSelect(parsed *parser.SelectStmt) (*QueryStmt, error) {
 		return nil, err
 	}
 
+	where, err := resolveWhere(parsed.Where)
+
+	if err != nil {
+		return nil, err
+	}
+
 	sel := &SelectStmt{
 		tableName:  parsed.TableName,
 		projection: projection,
 		joins:      joins,
 		orders:     orders,
+		where:      where,
 	}
 
 	queryStmt := &QueryStmt{
@@ -46,6 +53,14 @@ func resolveSelect(parsed *parser.SelectStmt) (*QueryStmt, error) {
 	}
 
 	return queryStmt, nil
+}
+
+func resolveWhere(w *parser.WhereClause) (*Expr, error) {
+	if w == nil {
+		return nil, nil
+	}
+
+	return resolveExpr(&w.Expr)
 }
 
 func parseJoinMode(s string) (JoinMode, error) {
@@ -81,19 +96,16 @@ func resolveJoins(parsed []parser.JoinClause) ([]JoinStmt, error) {
 			return nil, err
 		}
 
+		onExpr, err := resolveExpr(&j.On.Expr)
+
+		if err != nil {
+			return nil, fmt.Errorf("join: %w", err)
+		}
+
 		joins = append(joins, JoinStmt{
 			tableName: j.Table,
 			mode:      mode,
-			on: JoinOn{
-				left: ColumnRef{
-					table:  j.On.Left.Table(),
-					column: j.On.Left.Column(),
-				},
-				right: ColumnRef{
-					table:  j.On.Right.Table(),
-					column: j.On.Right.Column(),
-				},
-			},
+			onExpr:    onExpr,
 		})
 	}
 
@@ -133,40 +145,29 @@ func resolveProjection(items []parser.SelectItem) ([]ProjectedColumn, error) {
 
 		col, err := columnName(item.Expr)
 
-		if err != nil {
-			return nil, err
+		if err == nil {
+			projection = append(projection, ProjectedColumn{source: col, alias: item.Alias})
+			continue
 		}
 
-		projection = append(projection, ProjectedColumn{source: col, alias: item.Alias})
+		expr, rerr := resolveExpr(item.Expr)
+
+		if rerr != nil {
+			return nil, rerr
+		}
+
+		projection = append(projection, ProjectedColumn{expr: expr, alias: item.Alias})
 	}
 
 	return projection, nil
 }
 
 func columnName(expr *parser.Expr) (string, error) {
-	if expr == nil || expr.Left == nil {
+	if expr == nil || len(expr.Factors) != 1 {
 		return "", fmt.Errorf("unsupported expression in select list")
 	}
 
-	if expr.Op != "" || expr.Right != nil {
-		return "", fmt.Errorf("unsupported expression in select list")
-	}
-
-	term := expr.Left
-
-	if term.Op != "" || term.Right != nil {
-		return "", fmt.Errorf("unsupported expression in select list")
-	}
-
-	factor := term.Left
-
-	if factor == nil || factor.Star || factor.Func != nil || factor.SubExpr != nil {
-		return "", fmt.Errorf("unsupported expression in select list")
-	}
-
-	if factor.Num != "" || factor.Hex != "" || factor.Str != "" {
-		return "", fmt.Errorf("unsupported expression in select list")
-	}
+	factor := expr.Factors[0]
 
 	if factor.Column == "" {
 		return "", fmt.Errorf("unsupported expression in select list")

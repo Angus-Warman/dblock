@@ -1,9 +1,7 @@
 package internal
 
 import (
-	"bytes"
 	"fmt"
-	"time"
 )
 
 type joinEntry struct {
@@ -15,8 +13,6 @@ type JoinScanner struct {
 	left           Scanner
 	right          Scanner
 	columns        []string
-	leftJoinIdx    int
-	rightJoinIdx   int
 	leftColCount   int
 	rightColCount  int
 	rightRows      []joinEntry
@@ -27,6 +23,7 @@ type JoinScanner struct {
 	leftMatched    bool
 	needsNewLeft   bool
 
+	onExpr           *Expr
 	emitLeftUnmatched  bool // LEFT, FULL
 	emitRightUnmatched bool // RIGHT, FULL
 }
@@ -48,28 +45,12 @@ func NewJoinScanner(left, right Scanner, stmt *SelectStmt, join *JoinStmt) (*Joi
 		return nil, fmt.Errorf("unsupported join mode: %v", join.mode)
 	}
 
+	if join.onExpr == nil {
+		return nil, fmt.Errorf("join: missing ON expression")
+	}
+
 	leftCols := left.Columns()
 	rightCols := right.Columns()
-
-	leftJoinIdx := -1
-	for i, col := range leftCols {
-		if col == join.on.left.column {
-			leftJoinIdx = i
-			break
-		}
-	}
-
-	rightJoinIdx := -1
-	for i, col := range rightCols {
-		if col == join.on.right.column {
-			rightJoinIdx = i
-			break
-		}
-	}
-
-	if leftJoinIdx < 0 || rightJoinIdx < 0 {
-		return nil, fmt.Errorf("join column not found")
-	}
 
 	columns := make([]string, 0, len(leftCols)+len(rightCols))
 
@@ -85,10 +66,9 @@ func NewJoinScanner(left, right Scanner, stmt *SelectStmt, join *JoinStmt) (*Joi
 		left:          left,
 		right:         right,
 		columns:       columns,
-		leftJoinIdx:   leftJoinIdx,
-		rightJoinIdx:  rightJoinIdx,
 		leftColCount:  len(leftCols),
 		rightColCount: len(rightCols),
+		onExpr:        join.onExpr,
 		needsNewLeft:  true,
 
 		emitLeftUnmatched:  emitLeft,  // LEFT, FULL
@@ -129,17 +109,32 @@ func (j *JoinScanner) Next() (key []byte, row Row, ok bool, err error) {
 			rightEntry := j.rightRows[j.rightIdx]
 			j.rightIdx++
 
-			leftVal := j.currentLeft.row.Values[j.leftJoinIdx]
-			rightVal := rightEntry.row.Values[j.rightJoinIdx]
+			combined := combineRows(j.currentLeft.row, rightEntry.row)
 
-			if !valuesEqual(leftVal, rightVal) {
+			val, err := evalExpr(j.onExpr, j.columns, combined.Values)
+
+			if err != nil {
+				return nil, Row{}, false, err
+			}
+
+			if val == nil {
+				continue
+			}
+
+			matches, isBool := val.(bool)
+
+			if !isBool {
+				return nil, Row{}, false, fmt.Errorf("join: ON expression must evaluate to a boolean, got %T", val)
+			}
+
+			if !matches {
 				continue
 			}
 
 			j.matchedRight[j.rightIdx-1] = true
 			j.leftMatched = true
 
-			return j.currentLeft.key, combineRows(j.currentLeft.row, rightEntry.row), true, nil
+			return j.currentLeft.key, combined, true, nil
 		}
 
 		if !j.leftMatched && j.emitLeftUnmatched {
@@ -191,30 +186,6 @@ func (j *JoinScanner) loadRightRows() error {
 	j.matchedRight = make([]bool, len(j.rightRows))
 
 	return nil
-}
-
-func valuesEqual(a, b any) bool {
-	// NULLs are never equal
-	if a == nil || b == nil {
-		return false
-	}
-
-	switch av := a.(type) {
-	case []byte:
-		bv, ok := b.([]byte)
-		if !ok {
-			return false
-		}
-		return bytes.Equal(av, bv)
-	case time.Time:
-		bv, ok := b.(time.Time)
-		if !ok {
-			return false
-		}
-		return av.Equal(bv)
-	default:
-		return a == b
-	}
 }
 
 func combineRows(left, right Row) Row {

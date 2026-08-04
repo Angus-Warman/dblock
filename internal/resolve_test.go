@@ -145,5 +145,4 @@ func TestResolveJoins(t *testing.T) {
 			require.Equal(t, s.joins[0].mode, tc.mode)
 		})
 	}
-
 }

@@ -33,11 +33,13 @@ type SelectStmt struct {
 	projection []ProjectedColumn
 	joins      []JoinStmt
 	orders     []ColumnRef
+	where      *Expr
 }
 
 type ProjectedColumn struct {
 	source string
 	alias  string
+	expr   *Expr
 }
 
 type JoinMode string
@@ -56,13 +58,8 @@ const (
 
 type JoinStmt struct {
 	tableName string
-	on        JoinOn
+	onExpr    *Expr
 	mode      JoinMode
-}
-
-type JoinOn struct {
-	left  ColumnRef
-	right ColumnRef
 }
 
 type ColumnRef struct {
