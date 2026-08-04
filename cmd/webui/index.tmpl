@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <title>dblock</title>
+    <meta name="color-scheme" content="dark light">
+    <script src="https://cdn.jsdelivr.net/npm/htmx.org@4.0.0-beta6/dist/htmx.min.js" integrity="sha384-6lyVbhrs13b9z7mLOpt/N6R76rtkEBWgCjAXRs/DSWyi2AMnQSs10ijWk+PI8n7W" crossorigin="anonymous"></script>
+    <style>
+        body {
+            font-family: sans-serif;
+            max-width: 1300px;
+            margin: 2rem auto;
+            padding: 0 1rem;
+        }
+
+        .layout {
+            display: flex;
+            gap: 2rem;
+            align-items: flex-start;
+        }
+
+        .main {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .sidebar {
+            width: 220px;
+            flex-shrink: 0;
+            border: 1px solid #ccc;
+            border-radius: 6px;
+            padding: .75rem 1rem;
+        }
+
+        .sidebar h2 {
+            font-size: 1rem;
+            margin: 0 0 .5rem 0;
+        }
+
+        .sidebar ul {
+            list-style: none;
+            margin: 0;
+            padding: 0;
+        }
+
+        .sidebar li {
+            padding: .25rem 0;
+            border-bottom: 1px solid #eee;
+            font-family: monospace;
+        }
+
+        .sidebar li:last-child {
+            border-bottom: none;
+        }
+
+        .sidebar .empty {
+            font-style: italic;
+        }
+
+        input {
+            width: 100%;
+            padding: 1rem;
+            font: inherit;
+            box-sizing: border-box;
+        }
+
+        button {
+            margin-top: .5rem;
+        }
+
+        .error {
+            color: #b00020;
+            margin: 1rem 0;
+        }
+
+        .meta {
+            color: #666;
+            margin: 1rem 0;
+            font-size: .9rem;
+        }
+
+        table {
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+
+        th,
+        td {
+            border: 1px solid #ccc;
+            padding: .3rem .6rem;
+            text-align: left;
+        }
+
+        .htmx-indicator {
+            opacity: 0;
+            transition: opacity 100ms ease-in;
+        }
+
+        .htmx-request .htmx-indicator {
+            opacity: 1;
+        }
+
+        .htmx-request.htmx-indicator {
+            opacity: 1;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="layout">
+        <div class="main">
+            <form hx-post="/" hx-target="#result" hx-swap="innerHTML" hx-indicator="#spinner">
+                <input name="query" value="{{.Query}}" autocomplete="off">
+                <button>Submit</button>
+                <span id="spinner" class="htmx-indicator">Running&hellip;</span>
+            </form>
+
+            <div id="result">
+                {{template "result" .}}
+            </div>
+        </div>
+
+        <div id="tables-list" class="sidebar">
+            <h2>Tables</h2>
+            {{template "tables" .}}
+        </div>
+    </div>
+</body>
+
+</html>
+
+{{define "result"}}
+{{if .Duration}}
+<div class="meta">
+    Completed in {{.Duration}}
+</div>
+{{end}}
+
+{{if .Error}}
+<div class="error">
+    {{.Error}}
+</div>
+{{end}}
+
+{{if .Columns}}
+<table>
+    <thead>
+        <tr>
+            {{range .Columns}}
+            <th>{{.}}</th>
+            {{end}}
+        </tr>
+    </thead>
+    <tbody>
+        {{range .Rows}}
+        <tr>
+            {{range .}}
+            <td>{{printf "%v" .}}</td>
+            {{end}}
+        </tr>
+        {{end}}
+    </tbody>
+</table>
+{{end}}
+{{end}}
+
+{{define "tables"}}
+{{if .Tables}}
+<ul>
+    {{range .Tables}}
+    <li>{{.}}</li>
+    {{end}}
+</ul>
+{{else}}
+<p class="empty">No tables yet</p>
+{{end}}
+{{end}}
+
+{{define "tables-oob"}}
+<div id="tables-list" class="sidebar" hx-swap-oob="true">
+    <h2>Tables</h2>
+    {{template "tables" .}}
+</div>
+{{end}}
