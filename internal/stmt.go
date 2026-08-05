@@ -34,6 +34,7 @@ type SelectStmt struct {
 	joins      []JoinStmt
 	orders     []ColumnRef
 	where      *Expr
+	groupBy    []*Expr
 }
 
 type ProjectedColumn struct {

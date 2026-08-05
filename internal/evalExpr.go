@@ -37,13 +37,13 @@ func evalExpr(expr *Expr, columns []string, values []any) (any, error) {
 		return values[idx], nil
 
 	case BinaryKind:
-		left, err := evalExpr(&expr.Binary.Left, columns, values)
+		left, err := evalExpr(expr.Binary.Left, columns, values)
 
 		if err != nil {
 			return nil, err
 		}
 
-		right, err := evalExpr(&expr.Binary.Right, columns, values)
+		right, err := evalExpr(expr.Binary.Right, columns, values)
 
 		if err != nil {
 			return nil, err
@@ -232,6 +232,9 @@ func exprString(expr *Expr) string {
 	}
 
 	switch expr.Kind {
+	case StarExpr:
+		return "*"
+
 	case IntExpr:
 		return strconv.FormatInt(expr.Int, 10)
 
@@ -248,7 +251,7 @@ func exprString(expr *Expr) string {
 		return expr.Column
 
 	case BinaryKind:
-		return "(" + exprString(&expr.Binary.Left) + " " + string(expr.Binary.Op) + " " + exprString(&expr.Binary.Right) + ")"
+		return "(" + exprString(expr.Binary.Left) + " " + string(expr.Binary.Op) + " " + exprString(expr.Binary.Right) + ")"
 
 	case FuncKind:
 		args := make([]string, len(expr.FuncCall.Args))
@@ -257,7 +260,7 @@ func exprString(expr *Expr) string {
 			args[i] = exprString(&expr.FuncCall.Args[i])
 		}
 
-		return expr.FuncCall.Name + "(" + strings.Join(args, ", ") + ")"
+		return string(expr.FuncCall.Name) + "(" + strings.Join(args, ", ") + ")"
 	}
 
 	return ""

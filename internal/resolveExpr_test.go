@@ -16,23 +16,23 @@ func TestResolveExpr(t *testing.T) {
 	expected := &Expr{
 		Kind: BinaryKind,
 		Binary: &BinaryExpr{
-			Left: Expr{
+			Left: &Expr{
 				Kind: BinaryKind,
 				Binary: &BinaryExpr{
-					Left: Expr{
+					Left: &Expr{
 						Kind: IntExpr,
 						Int:  2,
 					},
 					Op: Add,
-					Right: Expr{
+					Right: &Expr{
 						Kind: BinaryKind,
 						Binary: &BinaryExpr{
 							Op: Divide,
-							Left: Expr{
+							Left: &Expr{
 								Kind: IntExpr,
 								Int:  3,
 							},
-							Right: Expr{
+							Right: &Expr{
 								Kind: IntExpr,
 								Int:  4,
 							},
@@ -41,7 +41,7 @@ func TestResolveExpr(t *testing.T) {
 				},
 			},
 			Op: Subtract,
-			Right: Expr{
+			Right: &Expr{
 				Kind:   ColumnExpr,
 				Column: "a",
 			},
@@ -65,12 +65,12 @@ func TestResolveMultiply(t *testing.T) {
 	expected := &Expr{
 		Kind: BinaryKind,
 		Binary: &BinaryExpr{
-			Left: Expr{
+			Left: &Expr{
 				Kind:   ColumnExpr,
 				Column: "a",
 			},
 			Op: Multiply,
-			Right: Expr{
+			Right: &Expr{
 				Kind: IntExpr,
 				Int:  4,
 			},

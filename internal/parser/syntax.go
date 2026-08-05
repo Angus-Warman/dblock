@@ -151,7 +151,7 @@ type WhereClause struct {
 }
 
 type GroupByClause struct {
-	Columns []string `parser:"\"GROUP\" \"BY\" @Ident (\",\" @Ident)*"`
+	Items []Expr `parser:"\"GROUP\" \"BY\" @@ (\",\" @@)*"`
 }
 
 type OrderByClause struct {

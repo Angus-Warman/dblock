@@ -40,12 +40,19 @@ func resolveSelect(parsed *parser.SelectStmt) (*QueryStmt, error) {
 		return nil, err
 	}
 
+	groupBy, err := resolveGroupBy(parsed.GroupBy)
+
+	if err != nil {
+		return nil, err
+	}
+
 	sel := &SelectStmt{
 		tableName:  parsed.TableName,
 		projection: projection,
 		joins:      joins,
 		orders:     orders,
 		where:      where,
+		groupBy:    groupBy,
 	}
 
 	queryStmt := &QueryStmt{
@@ -133,6 +140,26 @@ func resolveOrders(parsed *parser.OrderByClause, tableName, alias string) ([]Col
 	}
 
 	return orders, nil
+}
+
+func resolveGroupBy(parsed *parser.GroupByClause) ([]*Expr, error) {
+	if parsed == nil {
+		return nil, nil
+	}
+
+	groups := []*Expr{}
+
+	for i := range parsed.Items {
+		expr, err := resolveExpr(&parsed.Items[i])
+
+		if err != nil {
+			return nil, fmt.Errorf("group by: %w", err)
+		}
+
+		groups = append(groups, expr)
+	}
+
+	return groups, nil
 }
 
 func resolveProjection(items []parser.SelectItem) ([]ProjectedColumn, error) {

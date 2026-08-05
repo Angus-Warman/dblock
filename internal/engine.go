@@ -185,12 +185,24 @@ func (e *Engine) querySelect(stmt *SelectStmt, args []any) (Scanner, error) {
 		}
 	}
 
+	if hasAggregates(stmt) {
+		scanner, err = NewAggregateScanner(scanner, stmt)
+
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	if len(stmt.orders) > 0 {
 		scanner, err = NewOrderScanner(scanner, stmt)
 
 		if err != nil {
 			return nil, err
 		}
+	}
+
+	if hasAggregates(stmt) {
+		return scanner, nil
 	}
 
 	scanner, err = NewProjectorScanner(scanner, stmt)
@@ -200,6 +212,22 @@ func (e *Engine) querySelect(stmt *SelectStmt, args []any) (Scanner, error) {
 	}
 
 	return scanner, nil
+}
+
+// hasAggregates reports whether the statement needs aggregation: a GROUP BY
+// clause, or any aggregate function call in the projection.
+func hasAggregates(stmt *SelectStmt) bool {
+	if len(stmt.groupBy) > 0 {
+		return true
+	}
+
+	for _, item := range stmt.projection {
+		if item.expr != nil && item.expr.Kind == FuncKind {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (e *Engine) SelectAllFromTable(tableName string) (Scanner, error) {

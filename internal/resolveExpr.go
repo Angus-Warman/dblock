@@ -35,8 +35,18 @@ type Expr struct {
 	FuncCall *FuncExpr
 }
 
+type FuncName string
+
+const (
+	CountFunc FuncName = "COUNT"
+	MaxFunc   FuncName = "MAX"
+	MinFunc   FuncName = "MIN"
+	SumFunc   FuncName = "SUM"
+	AvgFunc   FuncName = "AVG"
+)
+
 type FuncExpr struct {
-	Name string
+	Name FuncName
 	Args []Expr
 }
 
@@ -64,9 +74,9 @@ const (
 )
 
 type BinaryExpr struct {
-	Left  Expr
+	Left  *Expr
 	Op    Operator
-	Right Expr
+	Right *Expr
 }
 
 var precedence = map[Operator]int{
@@ -114,7 +124,7 @@ func resolveExpr(input *parser.Expr) (*Expr, error) {
 	if !m.done() {
 		return nil, fmt.Errorf("resolveExpr: unexpected token at %d, %+v", m.pos, m.factors[m.pos])
 	}
-	return &expr, nil
+	return expr, nil
 }
 
 // exprMachine walks a flat []parser.Factor and, via precedence climbing,
@@ -165,10 +175,10 @@ func operatorOf(f *parser.Factor) (Operator, bool) {
 // then greedily folds in any following binary operators whose precedence
 // is >= minPrec, recursing with minPrec+1 on the right-hand side to enforce
 // left-associativity.
-func (m *exprMachine) parseExpr(minPrec int) (Expr, error) {
+func (m *exprMachine) parseExpr(minPrec int) (*Expr, error) {
 	left, err := m.parsePrimary()
 	if err != nil {
-		return Expr{}, err
+		return nil, err
 	}
 
 	for {
@@ -188,10 +198,10 @@ func (m *exprMachine) parseExpr(minPrec int) (Expr, error) {
 
 		right, err := m.parseExpr(prec + 1)
 		if err != nil {
-			return Expr{}, err
+			return nil, err
 		}
 
-		left = Expr{
+		left = &Expr{
 			Kind: BinaryKind,
 			Binary: &BinaryExpr{
 				Left:  left,
@@ -206,15 +216,15 @@ func (m *exprMachine) parseExpr(minPrec int) (Expr, error) {
 
 // parsePrimary resolves a single non-operator Factor: a literal, column
 // reference, star, function call, or parenthesized sub-expression.
-func (m *exprMachine) parsePrimary() (Expr, error) {
+func (m *exprMachine) parsePrimary() (*Expr, error) {
 	f, err := m.next()
 	if err != nil {
-		return Expr{}, err
+		return nil, err
 	}
 
 	switch {
 	case f.Star:
-		return Expr{Kind: StarExpr, Star: true}, nil
+		return &Expr{Kind: StarExpr, Star: true}, nil
 
 	case f.Func != nil:
 		return resolveFuncCall(f.Func)
@@ -223,15 +233,15 @@ func (m *exprMachine) parsePrimary() (Expr, error) {
 		sub := &exprMachine{factors: f.SubExpr.Factors}
 		expr, err := sub.parseExpr(0)
 		if err != nil {
-			return Expr{}, err
+			return nil, err
 		}
 		if !sub.done() {
-			return Expr{}, fmt.Errorf("resolveExpr: unexpected trailing token in parenthesized expression")
+			return nil, fmt.Errorf("resolveExpr: unexpected trailing token in parenthesized expression")
 		}
 		return expr, nil
 
 	case f.Column != "":
-		return Expr{Kind: ColumnExpr, Column: f.Column}, nil
+		return &Expr{Kind: ColumnExpr, Column: f.Column}, nil
 
 	case f.Num != "":
 		return parseNumLiteral(f.Num)
@@ -239,35 +249,44 @@ func (m *exprMachine) parsePrimary() (Expr, error) {
 	case f.Hex != "":
 		blob, err := parseHexLiteral(f.Hex)
 		if err != nil {
-			return Expr{}, err
+			return nil, err
 		}
-		return Expr{Kind: BlobExpr, Blob: blob}, nil
+		return &Expr{Kind: BlobExpr, Blob: blob}, nil
 
 	case f.Str != "":
-		return Expr{Kind: TextExpr, Text: f.Str}, nil
+		return &Expr{Kind: TextExpr, Text: f.Str}, nil
 
 	default:
-		return Expr{}, fmt.Errorf("resolveExpr: unrecognized factor at position %d", m.pos-1)
+		return nil, fmt.Errorf("resolveExpr: unrecognized factor at position %d", m.pos-1)
 	}
 }
 
-func resolveFuncCall(fc *parser.FuncCall) (Expr, error) {
+func resolveFuncCall(fc *parser.FuncCall) (*Expr, error) {
+	name := FuncName(fc.Name)
+
+	switch name {
+	case CountFunc, MinFunc, MaxFunc, SumFunc, AvgFunc:
+		// do nothing
+	default:
+		return nil, fmt.Errorf("%q function not supported", name)
+	}
+
 	args := make([]Expr, len(fc.Args))
 	for i, argExpr := range fc.Args {
 		sub := &exprMachine{factors: argExpr.Factors}
 		resolved, err := sub.parseExpr(0)
 		if err != nil {
-			return Expr{}, fmt.Errorf("resolveExpr: arg %d of %s: %w", i, fc.Name, err)
+			return nil, fmt.Errorf("resolveExpr: arg %d of %s: %w", i, fc.Name, err)
 		}
 		if !sub.done() {
-			return Expr{}, fmt.Errorf("resolveExpr: unexpected trailing token in arg %d of %s", i, fc.Name)
+			return nil, fmt.Errorf("resolveExpr: unexpected trailing token in arg %d of %s", i, fc.Name)
 		}
-		args[i] = resolved
+		args[i] = *resolved
 	}
-	return Expr{
+	return &Expr{
 		Kind: FuncKind,
 		FuncCall: &FuncExpr{
-			Name: fc.Name,
+			Name: name,
 			Args: args,
 		},
 	}, nil
@@ -289,19 +308,19 @@ func parseBoolLiteral(s string) (bool, bool) {
 
 // parseNumLiteral decides between IntExpr and RealExpr based on whether the
 // literal text looks like a float (contains '.', 'e', or 'E').
-func parseNumLiteral(s string) (Expr, error) {
+func parseNumLiteral(s string) (*Expr, error) {
 	if strings.ContainsAny(s, ".eE") {
 		f, err := strconv.ParseFloat(s, 64)
 		if err != nil {
-			return Expr{}, fmt.Errorf("resolveExpr: invalid number literal %q: %w", s, err)
+			return nil, fmt.Errorf("resolveExpr: invalid number literal %q: %w", s, err)
 		}
-		return Expr{Kind: RealExpr, Real: f}, nil
+		return &Expr{Kind: RealExpr, Real: f}, nil
 	}
 	i, err := strconv.ParseInt(s, 10, 64)
 	if err != nil {
-		return Expr{}, fmt.Errorf("resolveExpr: invalid number literal %q: %w", s, err)
+		return nil, fmt.Errorf("resolveExpr: invalid number literal %q: %w", s, err)
 	}
-	return Expr{Kind: IntExpr, Int: i}, nil
+	return &Expr{Kind: IntExpr, Int: i}, nil
 }
 
 // parseHexLiteral decodes a hex/blob literal (e.g. SQLite's x'53514C697465')
