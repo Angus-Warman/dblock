@@ -159,8 +159,8 @@ type OrderByClause struct {
 }
 
 type OrderItem struct {
-	Column string `parser:"@Ident"`
-	Dir    string `parser:"(@(\"ASC\" | \"DESC\"))?"`
+	Expr Expr   `parser:"@@"`
+	Dir  string `parser:"(@(\"ASC\" | \"DESC\"))?"`
 }
 
 type LimitClause struct {

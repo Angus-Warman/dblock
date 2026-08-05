@@ -116,3 +116,45 @@ func TestSelectMany(t *testing.T) {
 		assertQueryRows(t, db, fmt.Sprintf("SELECT * FROM t%d", tIdx), expectedRows)
 	}
 }
+
+func TestSelectOrderByExpression(t *testing.T) {
+	db := openDB(t)
+	assertExec(t, db, "CREATE TABLE foo (id INTEGER, label TEXT)")
+	assertExec(t, db, "INSERT INTO foo VALUES (1, 'a')")
+	assertExec(t, db, "INSERT INTO foo VALUES (2, 'b')")
+	assertExec(t, db, "INSERT INTO foo VALUES (3, 'c')")
+	assertExec(t, db, "INSERT INTO foo VALUES (4, 'd')")
+	assertExec(t, db, "INSERT INTO foo VALUES (5, 'e')")
+	assertExec(t, db, "INSERT INTO foo VALUES (6, 'f')")
+
+	type testcase struct {
+		orderBy string
+		values  []any
+	}
+
+	cases := []testcase{
+		{
+			orderBy: "id = 3",
+			values:  []any{"a", "b", "d", "e", "f", "c"},
+		},
+		{
+			orderBy: "id = 3 DESC",
+			values:  []any{"c", "a", "b", "d", "e", "f"},
+		},
+		{
+			orderBy: "id <= 3",
+			values:  []any{"d", "e", "f", "a", "b", "c"},
+		},
+		{
+			orderBy: "id % 2 = 0",
+			values:  []any{"a", "c", "e", "b", "d", "f"},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.orderBy, func(t *testing.T) {
+			query := "SELECT label FROM foo ORDER BY " + tc.orderBy
+			assertQueryColumn(t, db, query, tc.values)
+		})
+	}
+}

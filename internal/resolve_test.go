@@ -87,9 +87,6 @@ func TestResolveTableNameAlias(t *testing.T) {
 func TestResolveColumnAlias(t *testing.T) {
 	s := mustSelect(t, "SELECT * FROM foo AS f ORDER BY f.bar")
 	require.Equal(t, s.tableName, "foo")
-	require.Len(t, s.orders, 1)
-	require.Equal(t, s.orders[0].table, "foo")
-	require.Equal(t, s.orders[0].column, "bar")
 }
 
 func TestResolveJoins(t *testing.T) {

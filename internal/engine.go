@@ -193,7 +193,7 @@ func (e *Engine) querySelect(stmt *SelectStmt, args []any) (Scanner, error) {
 		}
 	}
 
-	if len(stmt.orders) > 0 {
+	if stmt.orders != nil {
 		scanner, err = NewOrderScanner(scanner, stmt)
 
 		if err != nil {

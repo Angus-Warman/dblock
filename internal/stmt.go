@@ -32,7 +32,7 @@ type SelectStmt struct {
 	tableName  string
 	projection []ProjectedColumn
 	joins      []JoinStmt
-	orders     []ColumnRef
+	orders     []OrderStmt
 	where      *Expr
 	groupBy    []*Expr
 }

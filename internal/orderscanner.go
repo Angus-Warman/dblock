@@ -16,11 +16,9 @@ type orderEntry struct {
 }
 
 type OrderScanner struct {
-	base     Scanner
-	columns  []string
-	orderIdx []int
-	rows     []orderEntry
-	nextIdx  int
+	base    Scanner
+	rows    []orderEntry
+	nextIdx int
 }
 
 // Columns implements [Scanner].
@@ -48,22 +46,8 @@ func NewOrderScanner(base Scanner, stmt *SelectStmt) (Scanner, error) {
 		return nil, fmt.Errorf("order: select stmt is nil")
 	}
 
-	columns := base.Columns()
-
-	orderIdx := make([]int, len(stmt.orders))
-
-	for i, ord := range stmt.orders {
-		idx := slices.Index(columns, ord.column)
-
-		if idx < 0 && ord.table != "" {
-			idx = slices.Index(columns, ord.table+"."+ord.column)
-		}
-
-		if idx < 0 {
-			return nil, fmt.Errorf("order: no such column %q", ord.column)
-		}
-
-		orderIdx[i] = idx
+	if stmt.orders == nil {
+		return nil, fmt.Errorf("order by is nil")
 	}
 
 	rows := []orderEntry{}
@@ -82,20 +66,50 @@ func NewOrderScanner(base Scanner, stmt *SelectStmt) (Scanner, error) {
 		rows = append(rows, orderEntry{key: key, row: row})
 	}
 
+	columns := base.Columns()
+
 	slices.SortStableFunc(rows, func(a, b orderEntry) int {
-		for _, idx := range orderIdx {
-			if cmp := compareValues(a.row.Values[idx], b.row.Values[idx]); cmp != 0 {
-				return cmp
+		for _, order := range stmt.orders {
+			n, err := compareRows(a.row, b.row, columns, order)
+
+			if err != nil {
+				// TODO
+			}
+
+			if n != 0 {
+				return n
 			}
 		}
+
 		return 0
 	})
 
 	return &OrderScanner{
-		base:     base,
-		orderIdx: orderIdx,
-		rows:     rows,
+		base: base,
+		rows: rows,
 	}, nil
+}
+
+func compareRows(a, b Row, columns []string, by OrderStmt) (int, error) {
+	aVal, err := evalExpr(by.Expr, columns, a.Values)
+
+	if err != nil {
+		return 0, err
+	}
+
+	bVal, err := evalExpr(by.Expr, columns, b.Values)
+
+	if err != nil {
+		return 0, err
+	}
+
+	n := compareValues(aVal, bVal)
+
+	if by.IsDesc {
+		n *= -1
+	}
+
+	return n, nil
 }
 
 func compareValues(a, b any) int {

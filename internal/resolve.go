@@ -28,7 +28,7 @@ func resolveSelect(parsed *parser.SelectStmt) (*QueryStmt, error) {
 		return nil, err
 	}
 
-	orders, err := resolveOrders(parsed.OrderBy, parsed.TableName, parsed.Alias)
+	orderBy, err := resolveOrders(parsed.OrderBy, parsed.TableName, parsed.Alias)
 
 	if err != nil {
 		return nil, err
@@ -50,7 +50,7 @@ func resolveSelect(parsed *parser.SelectStmt) (*QueryStmt, error) {
 		tableName:  parsed.TableName,
 		projection: projection,
 		joins:      joins,
-		orders:     orders,
+		orders:     orderBy,
 		where:      where,
 		groupBy:    groupBy,
 	}
@@ -119,24 +119,28 @@ func resolveJoins(parsed []parser.JoinClause) ([]JoinStmt, error) {
 	return joins, nil
 }
 
-func resolveOrders(parsed *parser.OrderByClause, tableName, alias string) ([]ColumnRef, error) {
+type OrderStmt struct {
+	Expr   *Expr
+	IsDesc bool
+}
+
+func resolveOrders(parsed *parser.OrderByClause, tableName, alias string) ([]OrderStmt, error) {
 	if parsed == nil {
 		return nil, nil
 	}
 
-	orders := []ColumnRef{}
+	orders := []OrderStmt{}
 
-	for _, item := range parsed.Items {
-		ref := parser.ColumnAlias(item.Column)
+	for i, item := range parsed.Items {
+		expr, err := resolveExpr(&parsed.Items[i].Expr)
 
-		table := ref.Table()
-		column := ref.Column()
-
-		if table == alias {
-			table = tableName
+		if err != nil {
+			return nil, fmt.Errorf("group by: %w", err)
 		}
 
-		orders = append(orders, ColumnRef{table: table, column: column})
+		isDesc := item.Dir == "DESC"
+
+		orders = append(orders, OrderStmt{Expr: expr, IsDesc: isDesc})
 	}
 
 	return orders, nil
