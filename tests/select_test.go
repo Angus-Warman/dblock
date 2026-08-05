@@ -4,80 +4,73 @@ import (
 	"fmt"
 	"strings"
 	"testing"
-
-	"github.com/stretchr/testify/require"
 )
 
 func TestSelectOneColumn(t *testing.T) {
 	db := openDB(t)
-	mustExec(t, db, "CREATE TABLE foo (a TEXT, b TEXT, c TEXT)")
-	mustExec(t, db, "INSERT INTO foo VALUES ('1', '2', '3')")
-	mustQueryOne(t, db, "SELECT b FROM foo", []any{"2"})
+	assertExec(t, db, "CREATE TABLE foo (a TEXT, b TEXT, c TEXT)")
+	assertExec(t, db, "INSERT INTO foo VALUES ('1', '2', '3')")
+	assertQueryValue(t, db, "SELECT b FROM foo", "2")
 }
 
 func TestSelectMultipleColumns(t *testing.T) {
 	db := openDB(t)
-	mustExec(t, db, "CREATE TABLE foo (a TEXT, b TEXT, c TEXT)")
-	mustExec(t, db, "INSERT INTO foo VALUES ('1', '2', '3')")
-	mustQueryOne(t, db, "SELECT c, a FROM foo", []any{"3", "1"})
-	mustQueryOne(t, db, "SELECT a, b, c FROM foo", []any{"1", "2", "3"})
+	assertExec(t, db, "CREATE TABLE foo (a TEXT, b TEXT, c TEXT)")
+	assertExec(t, db, "INSERT INTO foo VALUES ('1', '2', '3')")
+	assertQueryRow(t, db, "SELECT c, a FROM foo", []any{"3", "1"})
+	assertQueryRow(t, db, "SELECT a, b, c FROM foo", []any{"1", "2", "3"})
 }
 
 func TestSelectAllColumns(t *testing.T) {
 	db := openDB(t)
-	mustExec(t, db, "CREATE TABLE foo (a TEXT, b TEXT)")
-	mustExec(t, db, "INSERT INTO foo VALUES ('1', '2')")
-	mustQueryOne(t, db, "SELECT * FROM foo", []any{"1", "2"})
+	assertExec(t, db, "CREATE TABLE foo (a TEXT, b TEXT)")
+	assertExec(t, db, "INSERT INTO foo VALUES ('1', '2')")
+	assertQueryRow(t, db, "SELECT * FROM foo", []any{"1", "2"})
 }
 
 func TestSelectUnknownColumn(t *testing.T) {
 	db := openDB(t)
-	mustExec(t, db, "CREATE TABLE foo (a TEXT)")
-	mustExec(t, db, "INSERT INTO foo VALUES ('1')")
-	_, err := db.Query("SELECT nope FROM foo")
-	require.Error(t, err)
+	assertExec(t, db, "CREATE TABLE foo (a TEXT)")
+	assertExec(t, db, "INSERT INTO foo VALUES ('1')")
+	assertQueryFails(t, db, "SELECT nope FROM foo", `no such column "nope"`)
 }
 
 func TestSelectAliasedColumns(t *testing.T) {
 	db := openDB(t)
-	mustExec(t, db, "CREATE TABLE foo (a TEXT, b REAL)")
-	rows, err := db.Query("SELECT a AS b, b AS c FROM foo")
-	require.NoError(t, err)
-	require.Equal(t, []string{"b", "c"}, mustColumns(t, rows))
+	assertExec(t, db, "CREATE TABLE foo (a TEXT, b REAL)")
+	assertQueryColumnNames(t, db, "SELECT a AS b, b AS c FROM foo", []string{"b", "c"})
 }
 
 func TestJoinTables(t *testing.T) {
 	db := openDB(t)
-	mustExec(t, db, "CREATE TABLE foo (a TEXT, b TEXT)")
-	mustExec(t, db, "INSERT INTO foo VALUES ('1', '2')")
-	mustExec(t, db, "CREATE TABLE bar (b TEXT, c TEXT)")
-	mustExec(t, db, "INSERT INTO bar VALUES ('2', '3')")
-	mustQueryOne(t, db, "SELECT * FROM foo JOIN bar ON foo.b = bar.b", []any{"1", "2", "2", "3"})
-	mustQueryColumnNames(t, db, "SELECT * FROM foo JOIN bar ON foo.b = bar.b", []string{"foo.a", "foo.b", "bar.b", "bar.c"})
+	assertExec(t, db, "CREATE TABLE foo (a TEXT, b TEXT)")
+	assertExec(t, db, "INSERT INTO foo VALUES ('1', '2')")
+	assertExec(t, db, "CREATE TABLE bar (b TEXT, c TEXT)")
+	assertExec(t, db, "INSERT INTO bar VALUES ('2', '3')")
+	assertQueryRow(t, db, "SELECT * FROM foo JOIN bar ON foo.b = bar.b", []any{"1", "2", "2", "3"})
+	assertQueryColumnNames(t, db, "SELECT * FROM foo JOIN bar ON foo.b = bar.b", []string{"foo.a", "foo.b", "bar.b", "bar.c"})
 }
 
 func TestJoinMultipleRows(t *testing.T) {
 	db := openDB(t)
-	mustExec(t, db, "CREATE TABLE foo (a TEXT, b TEXT)")
-	mustExec(t, db, "INSERT INTO foo VALUES ('1', 'x')")
-	mustExec(t, db, "INSERT INTO foo VALUES ('2', 'y')")
-	mustExec(t, db, "INSERT INTO foo VALUES ('3', 'z')")
-	mustExec(t, db, "CREATE TABLE bar (b TEXT, c TEXT)")
-	mustExec(t, db, "INSERT INTO bar VALUES ('y', '10')")
-	mustExec(t, db, "INSERT INTO bar VALUES ('w', '20')")
-	rows, err := db.Query("SELECT * FROM foo JOIN bar ON foo.b = bar.b")
-	require.NoError(t, err)
-	require.Equal(t, [][]any{{"2", "y", "y", "10"}}, getValues(t, rows))
+	assertExec(t, db, "CREATE TABLE foo (a TEXT, b TEXT)")
+	assertExec(t, db, "INSERT INTO foo VALUES ('1', 'x')")
+	assertExec(t, db, "INSERT INTO foo VALUES ('2', 'y')")
+	assertExec(t, db, "INSERT INTO foo VALUES ('3', 'z')")
+	assertExec(t, db, "CREATE TABLE bar (b TEXT, c TEXT)")
+	assertExec(t, db, "INSERT INTO bar VALUES ('y', '10')")
+	assertExec(t, db, "INSERT INTO bar VALUES ('w', '20')")
+	assertQueryRows(t, db, "SELECT * FROM foo JOIN bar ON foo.b = bar.b", [][]any{{"2", "y", "y", "10"}})
 }
 
 func TestSelectOrderBy(t *testing.T) {
 	db := openDB(t)
-	mustExec(t, db, "CREATE TABLE foo (a TEXT, b TEXT)")
-	mustExec(t, db, "INSERT INTO foo VALUES ('2', 'x')")
-	mustExec(t, db, "INSERT INTO foo VALUES ('1', 'y')")
-	mustExec(t, db, "INSERT INTO foo VALUES ('3', 'z')")
+	assertExec(t, db, "CREATE TABLE foo (a TEXT, b TEXT)")
+	assertExec(t, db, "INSERT INTO foo VALUES ('2', 'x')")
+	assertExec(t, db, "INSERT INTO foo VALUES ('1', 'y')")
+	assertExec(t, db, "INSERT INTO foo VALUES ('3', 'z')")
 
-	mustRows(t, db, "SELECT * FROM foo ORDER BY a", [][]any{{"1", "y"}, {"2", "x"}, {"3", "z"}})
+	assertQueryRows(t, db, "SELECT * FROM foo ORDER BY a", [][]any{{"1", "y"}, {"2", "x"}, {"3", "z"}})
 }
 
 func TestSelectMany(t *testing.T) {
@@ -94,7 +87,7 @@ func TestSelectMany(t *testing.T) {
 			colDefs[cIdx] = fmt.Sprintf("c%d TEXT", cIdx)
 		}
 
-		mustExec(t, db, fmt.Sprintf("CREATE TABLE t%d (%s)", tIdx, strings.Join(colDefs, ", ")))
+		assertExec(t, db, fmt.Sprintf("CREATE TABLE t%d (%s)", tIdx, strings.Join(colDefs, ", ")))
 
 		values := make([]string, numCols)
 
@@ -103,7 +96,7 @@ func TestSelectMany(t *testing.T) {
 		}
 
 		for range numRows {
-			mustExec(t, db, fmt.Sprintf("INSERT INTO t%d VALUES (%s)", tIdx, strings.Join(values, ", ")))
+			assertExec(t, db, fmt.Sprintf("INSERT INTO t%d VALUES (%s)", tIdx, strings.Join(values, ", ")))
 		}
 	}
 
@@ -120,6 +113,6 @@ func TestSelectMany(t *testing.T) {
 			expectedRows[rIdx] = expectedRow
 		}
 
-		mustRows(t, db, fmt.Sprintf("SELECT * FROM t%d", tIdx), expectedRows)
+		assertQueryRows(t, db, fmt.Sprintf("SELECT * FROM t%d", tIdx), expectedRows)
 	}
 }

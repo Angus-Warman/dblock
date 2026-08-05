@@ -12,17 +12,17 @@ import (
 
 func TestTimeRoundtrip(t *testing.T) {
 	db := openDB(t)
-	mustExec(t, db, "CREATE TABLE foo (created TIME)")
+	assertExec(t, db, "CREATE TABLE foo (created TIME)")
 	now := time.Now().In(time.UTC)
-	mustExec(t, db, "INSERT INTO foo VALUES (?)", now)
-	mustQueryOne(t, db, "SELECT * FROM foo", []any{now})
+	assertExec(t, db, "INSERT INTO foo VALUES (?)", now)
+	assertQueryValue(t, db, "SELECT * FROM foo", now)
 }
 
 func TestUUIDRoundtripA(t *testing.T) {
 	db := openDB(t)
-	mustExec(t, db, "CREATE TABLE foo (id UUID)")
+	assertExec(t, db, "CREATE TABLE foo (id UUID)")
 	original := uuid.New()
-	mustExec(t, db, "INSERT INTO foo VALUES (?)", original)
+	assertExec(t, db, "INSERT INTO foo VALUES (?)", original)
 	mustReturnUUID(t, db, "SELECT * FROM foo", original)
 }
 
@@ -37,43 +37,41 @@ func TestUUIDRoundtripA(t *testing.T) {
 
 func TestCatchInvalidData(t *testing.T) {
 	db := openDB(t)
-	mustExec(t, db, "CREATE TABLE foo (value REAL)")
-	_, err := db.Exec("INSERT INTO foo VALUES (?)", "bar")
-	require.Error(t, err)
+	assertExec(t, db, "CREATE TABLE foo (value REAL)")
+	assertExecFails(t, db, "INSERT INTO foo VALUES (?)", "expects REAL, got string", "bar")
 }
 
 func TestCatchIntegerMismatch(t *testing.T) {
 	db := openDB(t)
-	mustExec(t, db, "CREATE TABLE foo (value INTEGER)")
-	_, err := db.Exec("INSERT INTO foo VALUES (?)", "bar")
-	require.Error(t, err)
+	assertExec(t, db, "CREATE TABLE foo (value INTEGER)")
+	assertExecFails(t, db, "INSERT INTO foo VALUES (?)", "expects INTEGER, got float", 1.5)
 }
 
 func TestInsertNull(t *testing.T) {
 	db := openDB(t)
-	mustExec(t, db, "CREATE TABLE foo (value INTEGER)")
-	_, err := db.Exec("INSERT INTO foo VALUES (?)", nil)
-	require.Error(t, err)
+	assertExec(t, db, "CREATE TABLE foo (value INTEGER)")
+	assertExecFails(t, db, "INSERT INTO foo VALUES (?)", "cannot insert null value", nil)
 }
 
 func TestInsertNullIntoAny(t *testing.T) {
 	db := openDB(t)
-	mustExec(t, db, "CREATE TABLE foo (value ANY)")
-	mustExec(t, db, "INSERT INTO foo VALUES (?)", nil)
-	mustQueryOne(t, db, "SELECT * FROM foo", []any{nil})
+	assertExec(t, db, "CREATE TABLE foo (value ANY)")
+	assertExec(t, db, "INSERT INTO foo VALUES (?)", nil)
+	assertQueryValue(t, db, "SELECT * FROM foo", nil)
 }
 
 func TestRoundtripUUIDThroughAny(t *testing.T) {
 	db := openDB(t)
-	mustExec(t, db, "CREATE TABLE foo (id ANY)")
+	assertExec(t, db, "CREATE TABLE foo (id ANY)")
 	original := uuid.New()
-	mustExec(t, db, "INSERT INTO foo VALUES (?)", original)
-	mustQueryOne(t, db, "SELECT * FROM foo", []any{original})
+	assertExec(t, db, "INSERT INTO foo VALUES (?)", original)
+	assertQueryValue(t, db, "SELECT * FROM foo", original)
 }
 
 func mustReturnUUID(t *testing.T, db *sql.DB, query string, original uuid.UUID) {
+	t.Helper()
 	var returned uuid.UUID
-	rows, err := db.Query("SELECT * FROM foo")
+	rows, err := db.Query(query)
 	require.NoError(t, err)
 	rows.Next()
 	err = rows.Scan(&returned)
@@ -92,8 +90,8 @@ func TestInsertUUIDVariants(t *testing.T) {
 	for _, variant := range variants {
 		t.Run(fmt.Sprint(variant), func(t *testing.T) {
 			db := openDB(t)
-			mustExec(t, db, "CREATE TABLE foo (id UUID)")
-			mustExec(t, db, "INSERT INTO foo VALUES (?)", variant)
+			assertExec(t, db, "CREATE TABLE foo (id UUID)")
+			assertExec(t, db, "INSERT INTO foo VALUES (?)", variant)
 			mustReturnUUID(t, db, "SELECT * FROM foo", original)
 		})
 	}
@@ -121,9 +119,9 @@ func TestDataCoercion(t *testing.T) {
 		t.Run(fmt.Sprint(tc), func(t *testing.T) {
 			db := openDB(t)
 			tableDef := fmt.Sprintf("CREATE TABLE foo (value %v)", tc.colType)
-			mustExec(t, db, tableDef)
-			mustExec(t, db, "INSERT INTO foo VALUES (?)", tc.in)
-			mustQueryOne(t, db, "SELECT * FROM foo", []any{tc.out})
+			assertExec(t, db, tableDef)
+			assertExec(t, db, "INSERT INTO foo VALUES (?)", tc.in)
+			assertQueryValue(t, db, "SELECT * FROM foo", tc.out)
 		})
 	}
 }

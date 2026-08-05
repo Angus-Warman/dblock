@@ -161,7 +161,7 @@ func executeQuery(data *PageData) error {
 }
 
 func tableNames() ([]string, error) {
-	rows, err := db.Query("SELECT object_name FROM dblock_schema WHERE type = 'table' ORDER BY object_name")
+	rows, err := db.Query("SELECT name FROM dblock_schema WHERE type = 'table' ORDER BY name")
 	if err != nil {
 		return nil, err
 	}

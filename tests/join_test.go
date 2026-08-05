@@ -5,15 +5,15 @@ import "testing"
 func TestJoinOnExpression(t *testing.T) {
 	db := openDB(t)
 
-	mustExec(t, db, "CREATE TABLE foo (a INTEGER, b INTEGER)")
-	mustExec(t, db, "INSERT INTO foo VALUES (1, 10)")
-	mustExec(t, db, "INSERT INTO foo VALUES (5, 50)")
+	assertExec(t, db, "CREATE TABLE foo (a INTEGER, b INTEGER)")
+	assertExec(t, db, "INSERT INTO foo VALUES (1, 10)")
+	assertExec(t, db, "INSERT INTO foo VALUES (5, 50)")
 
-	mustExec(t, db, "CREATE TABLE bar (c INTEGER)")
-	mustExec(t, db, "INSERT INTO bar VALUES (2)")
-	mustExec(t, db, "INSERT INTO bar VALUES (6)")
+	assertExec(t, db, "CREATE TABLE bar (c INTEGER)")
+	assertExec(t, db, "INSERT INTO bar VALUES (2)")
+	assertExec(t, db, "INSERT INTO bar VALUES (6)")
 
-	mustRows(t, db, "SELECT * FROM foo JOIN bar ON foo.a + 1 = bar.c", [][]any{
+	assertQueryRows(t, db, "SELECT * FROM foo JOIN bar ON foo.a + 1 = bar.c", [][]any{
 		{int64(1), int64(10), int64(2)},
 		{int64(5), int64(50), int64(6)},
 	})
@@ -22,20 +22,20 @@ func TestJoinOnExpression(t *testing.T) {
 func TestJoinModes(t *testing.T) {
 	db := openDB(t)
 
-	mustExec(t, db, "CREATE TABLE foo (id ANY, a TEXT)")
-	mustExec(t, db, "INSERT INTO foo VALUES ('1', 'w')")
-	mustExec(t, db, "INSERT INTO foo VALUES ('2', 'x')")
-	mustExec(t, db, "INSERT INTO foo VALUES ('3', 'y')")
-	mustExec(t, db, "INSERT INTO foo VALUES ('4', 'z')")
-	mustExec(t, db, "INSERT INTO foo VALUES ('4', 'z2')") // fan-out on foo side too
-	mustExec(t, db, "INSERT INTO foo VALUES (NULL, 'n')") // NULL key
+	assertExec(t, db, "CREATE TABLE foo (id ANY, a TEXT)")
+	assertExec(t, db, "INSERT INTO foo VALUES ('1', 'w')")
+	assertExec(t, db, "INSERT INTO foo VALUES ('2', 'x')")
+	assertExec(t, db, "INSERT INTO foo VALUES ('3', 'y')")
+	assertExec(t, db, "INSERT INTO foo VALUES ('4', 'z')")
+	assertExec(t, db, "INSERT INTO foo VALUES ('4', 'z2')") // fan-out on foo side too
+	assertExec(t, db, "INSERT INTO foo VALUES (NULL, 'n')") // NULL key
 
-	mustExec(t, db, "CREATE TABLE bar (id ANY, b TEXT)")
-	mustExec(t, db, "INSERT INTO bar VALUES ('3', 'i')")
-	mustExec(t, db, "INSERT INTO bar VALUES ('4', 'j')")
-	mustExec(t, db, "INSERT INTO bar VALUES ('5', 'k')")
-	mustExec(t, db, "INSERT INTO bar VALUES ('5', 'l')")
-	mustExec(t, db, "INSERT INTO bar VALUES (NULL, 'n2')") // NULL key
+	assertExec(t, db, "CREATE TABLE bar (id ANY, b TEXT)")
+	assertExec(t, db, "INSERT INTO bar VALUES ('3', 'i')")
+	assertExec(t, db, "INSERT INTO bar VALUES ('4', 'j')")
+	assertExec(t, db, "INSERT INTO bar VALUES ('5', 'k')")
+	assertExec(t, db, "INSERT INTO bar VALUES ('5', 'l')")
+	assertExec(t, db, "INSERT INTO bar VALUES (NULL, 'n2')") // NULL key
 
 	type testcase struct {
 		query string
@@ -197,7 +197,7 @@ func TestJoinModes(t *testing.T) {
 
 	for _, tc := range testcases {
 		t.Run(tc.query, func(t *testing.T) {
-			mustRows(t, db, tc.query, tc.rows)
+			assertQueryRows(t, db, tc.query, tc.rows)
 		})
 	}
 }

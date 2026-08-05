@@ -220,7 +220,19 @@ func (e *Engine) SelectAllFromTable(tableName string) (Scanner, error) {
 	return NewFullScanner(tree, info.columns)
 }
 
-var schemaColumns = []string{"object_name", "object_type", "definition", "rootpage"}
+const (
+	schemaNameColumn = "name"
+	objectTypeColumn = "object_type"
+	definitionColumn = "definition"
+	rootpageColumn   = "rootPage"
+)
+
+var schemaColumns = []string{
+	schemaNameColumn,
+	objectTypeColumn,
+	definitionColumn,
+	rootpageColumn,
+}
 
 type tableInfo struct {
 	rootPage PageID

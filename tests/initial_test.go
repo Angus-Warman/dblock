@@ -24,55 +24,48 @@ func TestExecute(t *testing.T) {
 	res, err := db.Exec("CREATE TABLE data (label TEXT, value INTEGER)")
 	require.NoError(t, err)
 	require.NotNil(t, res)
-	res, err = db.Exec("CREATE TABLE data (label TEXT, value INTEGER)")
-	require.Error(t, err, "table should already exist")
+	assertExecFails(t, db, "CREATE TABLE data (label TEXT, value INTEGER)", "already exists")
 }
 
 func TestSelectTables(t *testing.T) {
 	db := openDB(t)
-	mustExec(t, db, "CREATE TABLE foo (label TEXT, value INTEGER)")
-	mustExec(t, db, "CREATE TABLE bar (label TEXT, value INTEGER)")
-	rows, err := db.Query("SELECT * FROM dblock_schema")
-	require.NoError(t, err)
-	col := getColumn(t, rows, 0)
-	require.Equal(t, []any{"foo", "bar"}, col)
+	assertExec(t, db, "CREATE TABLE foo (label TEXT, value INTEGER)")
+	assertExec(t, db, "CREATE TABLE bar (label TEXT, value INTEGER)")
+	assertQueryColumn(t, db, "SELECT name FROM dblock_schema", []any{"foo", "bar"})
 }
 
 func TestSelectEmpty(t *testing.T) {
 	db := openDB(t)
-	rows, err := db.Query("SELECT * FROM dblock_schema")
-	require.NoError(t, err)
-	col := getColumn(t, rows, 0)
-	require.Equal(t, []any{}, col)
+	assertQueryEmpty(t, db, "SELECT * FROM dblock_schema")
 }
 
 func TestInsert(t *testing.T) {
 	db := openDB(t)
-	mustExec(t, db, "CREATE TABLE foo (label TEXT, value INTEGER)")
-	mustExec(t, db, "INSERT INTO foo VALUES (?, ?)", "bar", 42)
-	mustQueryOne(t, db, "SELECT * FROM foo", []any{"bar", int64(42)})
+	assertExec(t, db, "CREATE TABLE foo (label TEXT, value INTEGER)")
+	assertExec(t, db, "INSERT INTO foo VALUES (?, ?)", "bar", 42)
+	assertQueryRow(t, db, "SELECT * FROM foo", []any{"bar", int64(42)})
 }
 
 func TestMultipleTables(t *testing.T) {
 	db := openDB(t)
-	mustExec(t, db, "CREATE TABLE a (label TEXT)")
-	mustExec(t, db, "CREATE TABLE b (label TEXT)")
-	mustExec(t, db, "INSERT INTO a VALUES (?)", "a value")
-	mustExec(t, db, "INSERT INTO b VALUES (?)", "b value")
-	mustQueryOne(t, db, "SELECT * FROM a", []any{"a value"})
-	mustQueryOne(t, db, "SELECT * FROM b", []any{"b value"})
+	assertExec(t, db, "CREATE TABLE a (label TEXT)")
+	assertExec(t, db, "CREATE TABLE b (label TEXT)")
+	assertExec(t, db, "INSERT INTO a VALUES (?)", "a value")
+	assertExec(t, db, "INSERT INTO b VALUES (?)", "b value")
+	assertQueryValue(t, db, "SELECT * FROM a", "a value")
+	assertQueryValue(t, db, "SELECT * FROM b", "b value")
 }
 
 func TestInsertLiteral(t *testing.T) {
 	db := openDB(t)
-	mustExec(t, db, "CREATE TABLE foo (label TEXT)")
-	mustExec(t, db, "INSERT INTO foo VALUES ('bar')")
-	mustQueryOne(t, db, "SELECT * FROM foo", []any{"bar"})
+	assertExec(t, db, "CREATE TABLE foo (label TEXT)")
+	assertExec(t, db, "INSERT INTO foo VALUES ('bar')")
+	assertQueryValue(t, db, "SELECT * FROM foo", "bar")
 }
 
 func TestInsertMixedLiteral(t *testing.T) {
 	db := openDB(t)
-	mustExec(t, db, "CREATE TABLE foo (a TEXT, b TEXT)")
-	mustExec(t, db, "INSERT INTO foo VALUES ('a', ?)", "b")
-	mustQueryOne(t, db, "SELECT * FROM foo", []any{"a", "b"})
+	assertExec(t, db, "CREATE TABLE foo (a TEXT, b TEXT)")
+	assertExec(t, db, "INSERT INTO foo VALUES ('a', ?)", "b")
+	assertQueryRow(t, db, "SELECT * FROM foo", []any{"a", "b"})
 }
