@@ -40,6 +40,16 @@ func (e *Engine) Exec(stmt *ExecStmt, args []any) (insertedID int64, rowsAffecte
 		return e.Insert(stmt.insertStmt, args)
 	}
 
+	if stmt.updateStmt != nil {
+		rowsAffected, err := e.Update(stmt.updateStmt)
+
+		if err != nil {
+			return -1, -1, err
+		}
+
+		return -1, rowsAffected, nil
+	}
+
 	if stmt.dropStmt != nil {
 		err := e.DropTable(stmt.dropStmt.tableName, stmt.dropStmt.ifExists)
 
@@ -368,6 +378,90 @@ func (e *Engine) Insert(stmt *InsertStmt, args []any) (insertedID int64, rowsAff
 	}
 
 	return int64(rowID), 1, nil
+}
+
+// Update applies an expression to the target column of every row matching
+// the WHERE clause, returning the number of rows modified.
+func (e *Engine) Update(stmt *UpdateStmt) (int64, error) {
+	if stmt == nil {
+		return -1, fmt.Errorf("Update: nothing to update in statement")
+	}
+
+	info, err := e.lookupTable(stmt.tableName)
+
+	if err != nil {
+		return -1, err
+	}
+
+	colIdx := -1
+
+	for i, name := range info.columns {
+		if name == stmt.column {
+			colIdx = i
+			break
+		}
+	}
+
+	if colIdx < 0 {
+		return -1, fmt.Errorf("Update: no such column %q", stmt.column)
+	}
+
+	tree := NewBtree(e.pager, info.rootPage)
+	keys, encodedRows, err := tree.All()
+
+	if err != nil {
+		return -1, err
+	}
+
+	var rowsAffected int64
+
+	for i, encodedRow := range encodedRows {
+		row, err := DecodeRow(encodedRow)
+
+		if err != nil {
+			return -1, err
+		}
+
+		if stmt.where != nil {
+			val, err := evalExpr(stmt.where, info.columns, row.Values)
+
+			if err != nil {
+				return -1, err
+			}
+
+			matches, isBool := val.(bool)
+
+			if !isBool {
+				return -1, fmt.Errorf("Update: where: expected boolean expression, got %T", val)
+			}
+
+			if !matches {
+				continue
+			}
+		}
+
+		val, err := evalExpr(stmt.expr, info.columns, row.Values)
+
+		if err != nil {
+			return -1, err
+		}
+
+		coerced, err := coerceValue(info.table.columns[colIdx], val)
+
+		if err != nil {
+			return -1, fmt.Errorf("Update: %w", err)
+		}
+
+		row.Values[colIdx] = coerced
+
+		if err := tree.Insert(keys[i], row.Encode()); err != nil {
+			return -1, err
+		}
+
+		rowsAffected++
+	}
+
+	return rowsAffected, nil
 }
 
 func (e *Engine) ExecCreate(stmt *CreateStmt) error {

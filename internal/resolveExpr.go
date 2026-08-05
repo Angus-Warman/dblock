@@ -254,7 +254,7 @@ func (m *exprMachine) parsePrimary() (*Expr, error) {
 		return &Expr{Kind: BlobExpr, Blob: blob}, nil
 
 	case f.Str != "":
-		return &Expr{Kind: TextExpr, Text: f.Str}, nil
+		return &Expr{Kind: TextExpr, Text: unquoteString(f.Str)}, nil
 
 	default:
 		return nil, fmt.Errorf("resolveExpr: unrecognized factor at position %d", m.pos-1)

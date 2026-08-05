@@ -195,6 +195,16 @@ func (c *Conn) NewStmt(query string) (*Stmt, error) {
 		stmt.queryStmt = sel
 	}
 
+	if parsed.Update != nil {
+		update, err := resolveUpdate(parsed.Update)
+
+		if err != nil {
+			return nil, err
+		}
+
+		stmt.execStmt = update
+	}
+
 	if parsed.Pragma != nil {
 		p, err := resolvePragma(parsed.Pragma)
 

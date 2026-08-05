@@ -128,7 +128,7 @@ func (c ColumnAlias) Column() string {
 type UpdateStmt struct {
 	Name   string       `parser:"\"UPDATE\" @Ident"`
 	Column string       `parser:"\"SET\" @Ident"`
-	Value  Value        `parser:"\"=\" @@"`
+	Value  Expr         `parser:"\"=\" @@"`
 	Where  *WhereClause `parser:"(@@)?"`
 }
 

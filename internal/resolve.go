@@ -263,6 +263,30 @@ func resolveInsert(parsed *parser.InsertStmt) (*ExecStmt, error) {
 	return execStmt, nil
 }
 
+func resolveUpdate(parsed *parser.UpdateStmt) (*ExecStmt, error) {
+	expr, err := resolveExpr(&parsed.Value)
+
+	if err != nil {
+		return nil, err
+	}
+
+	where, err := resolveWhere(parsed.Where)
+
+	if err != nil {
+		return nil, err
+	}
+
+	execStmt := &ExecStmt{
+		updateStmt: &UpdateStmt{
+			tableName: parsed.Name,
+			column:    parsed.Column,
+			expr:      expr,
+			where:     where,
+		},
+	}
+	return execStmt, nil
+}
+
 func resolvePragma(parsed *parser.PragmaStmt) (*PragmaStmt, error) {
 	property, err := pragma.Parse(parsed.Property)
 

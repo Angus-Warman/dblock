@@ -7,6 +7,7 @@ type ExecStmt struct {
 	insertStmt *InsertStmt
 	dropStmt   *DropStmt
 	pragmaStmt *PragmaStmt
+	updateStmt *UpdateStmt
 }
 
 type CreateStmt struct {
@@ -22,6 +23,13 @@ type DropStmt struct {
 type InsertStmt struct {
 	tableName string
 	values    []any // Either a placholder ?, or parsed literal value
+}
+
+type UpdateStmt struct {
+	tableName string
+	column    string
+	expr      *Expr
+	where     *Expr
 }
 
 type PragmaStmt struct {
