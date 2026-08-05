@@ -231,6 +231,16 @@ func resolveCreate(parsed *parser.CreateStmt) (*ExecStmt, error) {
 	return execStmt, nil
 }
 
+func resolveDrop(parsed *parser.DropStmt) (*ExecStmt, error) {
+	execStmt := &ExecStmt{
+		dropStmt: &DropStmt{
+			ifExists:  parsed.ExistClause != nil,
+			tableName: parsed.TableName,
+		},
+	}
+	return execStmt, nil
+}
+
 func resolveInsert(parsed *parser.InsertStmt) (*ExecStmt, error) {
 	values := []any{}
 

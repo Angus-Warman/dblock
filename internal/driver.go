@@ -175,6 +175,16 @@ func (c *Conn) NewStmt(query string) (*Stmt, error) {
 		stmt.execStmt = insert
 	}
 
+	if parsed.Drop != nil {
+		drop, err := resolveDrop(parsed.Drop)
+
+		if err != nil {
+			return nil, err
+		}
+
+		stmt.execStmt = drop
+	}
+
 	if parsed.Select != nil {
 		sel, err := resolveSelect(parsed.Select)
 

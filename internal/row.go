@@ -68,7 +68,7 @@ func DecodeRow(buf []byte) (Row, error) {
 
 	count, err := d.GetUint16()
 	if err != nil {
-		return zero, fmt.Errorf("row too short: %w", err)
+		return zero, fmt.Errorf("decode row: %w", err)
 	}
 
 	values := make([]any, count)
@@ -76,7 +76,7 @@ func DecodeRow(buf []byte) (Row, error) {
 	for i := range count {
 		dt, err := GetDataType(d)
 		if err != nil {
-			return zero, err
+			return zero, fmt.Errorf("decode row: %w", err)
 		}
 
 		switch dt {
@@ -86,35 +86,35 @@ func DecodeRow(buf []byte) (Row, error) {
 		case IntegerType:
 			v, err := d.GetInt64()
 			if err != nil {
-				return zero, fmt.Errorf("truncated integer: %w", err)
+				return zero, fmt.Errorf("decode row: %w", err)
 			}
 			values[i] = v
 
 		case RealType:
 			v, err := d.GetFloat64()
 			if err != nil {
-				return zero, fmt.Errorf("truncated real: %w", err)
+				return zero, fmt.Errorf("decode row: %w", err)
 			}
 			values[i] = v
 
 		case TextType:
 			v, err := d.GetStringWithLength()
 			if err != nil {
-				return zero, fmt.Errorf("truncated text: %w", err)
+				return zero, fmt.Errorf("decode row: %w", err)
 			}
 			values[i] = v
 
 		case BoolType:
 			v, err := d.GetUint8()
 			if err != nil {
-				return zero, fmt.Errorf("truncated bool: %w", err)
+				return zero, fmt.Errorf("decode row: %w", err)
 			}
 			values[i] = v != 0
 
 		case BlobType:
 			v, err := d.GetBytesWithLength()
 			if err != nil {
-				return zero, fmt.Errorf("truncated blob: %w", err)
+				return zero, fmt.Errorf("decode row: %w", err)
 			}
 			values[i] = v
 
@@ -149,7 +149,7 @@ func DecodeRow(buf []byte) (Row, error) {
 			values[i] = u
 
 		default:
-			return zero, fmt.Errorf("unsupported datatype %d", dt)
+			return zero, fmt.Errorf("decode row: unsupported datatype %d", dt)
 		}
 	}
 

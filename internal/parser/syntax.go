@@ -9,7 +9,7 @@ import (
 
 var sqlLexer = lexer.MustSimple([]lexer.SimpleRule{
 	{Name: "ws", Pattern: `\s+`},
-	{Name: "Keyword", Pattern: `CREATE|TABLE|PRIMARY|KEY|UNIQUE|INSERT|INTO|VALUES|SELECT|FROM|WHERE|IF|NOT|EXISTS|UPDATE|SET|GROUP|ORDER|ASC|DESC|AS|LIMIT|OFFSET|JOIN|INNER|OUTER|LEFT|RIGHT|FULL|CROSS|ON|ALTER|RENAME|COLUMN|TO`},
+	{Name: "Keyword", Pattern: `CREATE|DROP|TABLE|PRIMARY|KEY|UNIQUE|INSERT|INTO|VALUES|SELECT|FROM|WHERE|IF|NOT|EXISTS|UPDATE|SET|GROUP|ORDER|ASC|DESC|AS|LIMIT|OFFSET|JOIN|INNER|OUTER|LEFT|RIGHT|FULL|CROSS|ON|ALTER|RENAME|COLUMN|TO`},
 	{Name: "TypeName", Pattern: `TEXT|INTEGER|REAL|BLOB|BOOL|TIME|UUID|ANY`},
 	{Name: "True", Pattern: `TRUE`},
 	{Name: "False", Pattern: `FALSE`},
@@ -37,10 +37,7 @@ type ParsedStmt struct {
 	Select *SelectStmt `parser:"| @@  \";\"?"`
 	Update *UpdateStmt `parser:"| @@  \";\"?"`
 	Pragma *PragmaStmt `parser:"| @@  \";\"?"`
-}
-
-type IfExistsClause struct {
-	Line string `parser:"\"IF\" \"EXISTS\""`
+	Drop   *DropStmt   `parser:"| @@  \";\"?"`
 }
 
 type AlterStmt struct {
@@ -68,9 +65,9 @@ type AlterColTypeOp struct {
 }
 
 type CreateStmt struct {
-	ExistClause *ExistClause   `parser:"\"CREATE\" \"TABLE\" (@@)?"`
-	TableName   string         `parser:"@Ident"`
-	Columns     []ParsedColumn `parser:"\"(\" @@ (\",\" @@)* \")\""`
+	ExistClause *IfNotExistsClause `parser:"\"CREATE\" \"TABLE\" (@@)?"`
+	TableName   string             `parser:"@Ident"`
+	Columns     []ParsedColumn     `parser:"\"(\" @@ (\",\" @@)* \")\""`
 }
 
 type InsertStmt struct {
@@ -135,8 +132,12 @@ type UpdateStmt struct {
 	Where  *WhereClause `parser:"(@@)?"`
 }
 
-type ExistClause struct {
+type IfNotExistsClause struct {
 	Line string `parser:"\"IF\" \"NOT\" \"EXISTS\""`
+}
+
+type IfExistsClause struct {
+	Line string `parser:"\"IF\" \"EXISTS\""`
 }
 
 type ParsedColumn struct {
@@ -214,4 +215,9 @@ type SelectList struct {
 type PragmaStmt struct {
 	Property string `parser:"\"PRAGMA\" @Ident"`
 	Value    string `parser:"(@(Ident|Number))?"`
+}
+
+type DropStmt struct {
+	ExistClause *IfExistsClause `parser:"\"DROP\" \"TABLE\" (@@)?"`
+	TableName   string          `parser:"@Ident"`
 }

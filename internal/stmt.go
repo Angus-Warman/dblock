@@ -5,12 +5,18 @@ import "dblock2/internal/pragma"
 type ExecStmt struct {
 	createStmt *CreateStmt
 	insertStmt *InsertStmt
+	dropStmt   *DropStmt
 	pragmaStmt *PragmaStmt
 }
 
 type CreateStmt struct {
 	tableName string
 	columns   []Column
+}
+
+type DropStmt struct {
+	ifExists  bool
+	tableName string
 }
 
 type InsertStmt struct {

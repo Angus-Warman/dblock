@@ -23,7 +23,7 @@ func NewEngine(pager Pager) (*Engine, error) {
 
 func (e *Engine) Exec(stmt *ExecStmt, args []any) (insertedID int64, rowsAffected int64, err error) {
 	if stmt == nil {
-		return -1, -1, fmt.Errorf("Exec: nothing to execute in statement")
+		return -1, -1, fmt.Errorf("nothing to execute")
 	}
 
 	if stmt.createStmt != nil {
@@ -33,11 +33,21 @@ func (e *Engine) Exec(stmt *ExecStmt, args []any) (insertedID int64, rowsAffecte
 			return -1, -1, err
 		}
 
-		return 0, 0, nil
+		return 0, 0, nil // TODO technically a row was created in dblock_schema, with an ID
 	}
 
 	if stmt.insertStmt != nil {
 		return e.Insert(stmt.insertStmt, args)
+	}
+
+	if stmt.dropStmt != nil {
+		err := e.DropTable(stmt.dropStmt.tableName, stmt.dropStmt.ifExists)
+
+		if err != nil {
+			return -1, -1, err
+		}
+
+		return 0, 0, nil
 	}
 
 	if stmt.pragmaStmt != nil {
@@ -50,7 +60,7 @@ func (e *Engine) Exec(stmt *ExecStmt, args []any) (insertedID int64, rowsAffecte
 		return 0, 0, nil
 	}
 
-	return -1, -1, fmt.Errorf("Exec: unsupported statement")
+	return -1, -1, fmt.Errorf("unsupported statement")
 }
 
 type RootSchema struct {
@@ -60,7 +70,7 @@ type RootSchema struct {
 func (e *Engine) GetRootSchema() (*RootSchema, error) {
 	rootTree := NewBtree(e.pager, RootSchemaPageID)
 
-	encodedRows, err := rootTree.All()
+	_, encodedRows, err := rootTree.All()
 
 	if err != nil {
 		return nil, err
@@ -271,7 +281,7 @@ type tableInfo struct {
 func (e *Engine) lookupTable(name string) (*tableInfo, error) {
 	rootTree := NewBtree(e.pager, RootSchemaPageID)
 
-	encodedRows, err := rootTree.All()
+	_, encodedRows, err := rootTree.All()
 
 	if err != nil {
 		return nil, err
@@ -303,7 +313,7 @@ func (e *Engine) lookupTable(name string) (*tableInfo, error) {
 		}, nil
 	}
 
-	return nil, fmt.Errorf("no such table: %q", name)
+	return nil, fmt.Errorf("table '%v' does not exist", name)
 }
 
 func (e *Engine) Insert(stmt *InsertStmt, args []any) (insertedID int64, rowsAffected int64, err error) {
@@ -393,6 +403,48 @@ func (e *Engine) CreateTable(def *Table) error {
 	rootpage := e.pager.NextID()
 
 	return e.SaveSchemaObject(def.name, TableObject, def.Encode(), rootpage)
+}
+
+func (e *Engine) DropTable(name string, ifExists bool) error {
+	rootTree := NewBtree(e.pager, RootSchemaPageID)
+
+	keys, encodedRows, err := rootTree.All()
+
+	if err != nil {
+		return err
+	}
+
+	keyIdx := -1
+
+	for i, encodedRow := range encodedRows {
+		row, err := DecodeRow(encodedRow)
+
+		if err != nil {
+			return err
+		}
+
+		if row.Values[0].(string) == name {
+			keyIdx = i
+			break
+		}
+	}
+
+	if keyIdx < 0 {
+		if ifExists {
+			// Not found
+			return nil
+		}
+
+		return fmt.Errorf("'%s' does not exist", name)
+	}
+
+	err = rootTree.Delete(keys[keyIdx])
+
+	if err != nil {
+		return err
+	}
+
+	return e.bumpSchemaVersion()
 }
 
 func (e *Engine) SaveSchemaObject(objectName string, objectType SchemaObjectType, definition []byte, rootpage PageID) error {

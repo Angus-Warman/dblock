@@ -334,26 +334,47 @@ func (t *Tree) splitInternal(n *Page, path []pathEntry) error {
 	return t.insertIntoParent(n.ID, upKey, rightID, path)
 }
 
-func (t *Tree) All() ([][]byte, error) {
+func (t *Tree) All() ([][]byte, [][]byte, error) {
 	leaf, _, err := t.findLeaf([]byte{0})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	var result [][]byte
+	var keys, result [][]byte
 	for leaf != nil {
-		for _, val := range leaf.Values {
-			result = append(result, val)
-		}
+		keys = append(keys, leaf.Keys...)
+		result = append(result, leaf.Values...)
 		if leaf.NextLeaf == 0 {
 			break
 		}
 		leaf, err = t.loadPage(leaf.NextLeaf)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 	}
-	return result, nil
+	return keys, result, nil
+}
+
+// Delete removes a key and its value from the tree.
+func (t *Tree) Delete(key []byte) error {
+	leaf, _, err := t.findLeaf(key)
+	if err != nil {
+		return err
+	}
+
+	i := sort.Search(len(leaf.Keys), func(i int) bool {
+		return KeyCompare(leaf.Keys[i], key) >= 0
+	})
+
+	if i >= len(leaf.Keys) || KeyCompare(leaf.Keys[i], key) != 0 {
+		return fmt.Errorf("key %v not found", key)
+	}
+
+	leaf.Keys = append(leaf.Keys[:i], leaf.Keys[i+1:]...)
+	leaf.Values = append(leaf.Values[:i], leaf.Values[i+1:]...)
+	leaf.NumKeys = uint16(len(leaf.Keys))
+
+	return t.savePage(leaf)
 }
 
 func (t *Tree) KeyRange() ([]byte, []byte, error) {
