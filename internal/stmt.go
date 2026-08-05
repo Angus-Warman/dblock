@@ -8,6 +8,7 @@ type ExecStmt struct {
 	dropStmt   *DropStmt
 	pragmaStmt *PragmaStmt
 	updateStmt *UpdateStmt
+	alterStmt  *AlterStmt
 }
 
 type CreateStmt struct {
@@ -30,6 +31,28 @@ type UpdateStmt struct {
 	column    string
 	expr      *Expr
 	where     *Expr
+}
+
+type AlterStmt struct {
+	ifExists  bool
+	tableName string
+	renameCol *RenameColumnOp
+	renameTbl *RenameTableOp
+	alterCol  *AlterColumnTypeOp
+}
+
+type RenameColumnOp struct {
+	oldName string
+	newName string
+}
+
+type RenameTableOp struct {
+	newName string
+}
+
+type AlterColumnTypeOp struct {
+	colName string
+	newType string
 }
 
 type PragmaStmt struct {

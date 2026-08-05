@@ -50,6 +50,16 @@ func (e *Engine) Exec(stmt *ExecStmt, args []any) (insertedID int64, rowsAffecte
 		return -1, rowsAffected, nil
 	}
 
+	if stmt.alterStmt != nil {
+		err := e.AlterTable(stmt.alterStmt)
+
+		if err != nil {
+			return -1, -1, err
+		}
+
+		return 0, 0, nil
+	}
+
 	if stmt.dropStmt != nil {
 		err := e.DropTable(stmt.dropStmt.tableName, stmt.dropStmt.ifExists)
 
@@ -462,6 +472,150 @@ func (e *Engine) Update(stmt *UpdateStmt) (int64, error) {
 	}
 
 	return rowsAffected, nil
+}
+
+// AlterTable applies an ALTER TABLE operation to a stored table definition.
+func (e *Engine) AlterTable(stmt *AlterStmt) error {
+	if stmt == nil {
+		return fmt.Errorf("AlterTable: nothing to alter in statement")
+	}
+
+	info, err := e.lookupTable(stmt.tableName)
+
+	if err != nil {
+		if stmt.ifExists {
+			return nil
+		}
+
+		return err
+	}
+
+	table := info.table
+
+	switch {
+	case stmt.alterCol != nil:
+		if err := e.alterColumnType(table, stmt.alterCol); err != nil {
+			return err
+		}
+
+	case stmt.renameCol != nil:
+		if err := e.renameColumn(table, stmt.renameCol); err != nil {
+			return err
+		}
+
+	case stmt.renameTbl != nil:
+		if err := e.checkRenameTable(stmt.tableName, stmt.renameTbl.newName); err != nil {
+			return err
+		}
+
+		e.renameTable(table, stmt.renameTbl)
+
+	default:
+		return fmt.Errorf("AlterTable: unsupported ALTER TABLE operation")
+	}
+
+	return e.updateSchemaTable(stmt.tableName, table, info.rootPage)
+}
+
+func (e *Engine) alterColumnType(table *Table, op *AlterColumnTypeOp) error {
+	colIdx := -1
+
+	for i, col := range table.columns {
+		if col.name == op.colName {
+			colIdx = i
+			break
+		}
+	}
+
+	if colIdx < 0 {
+		return fmt.Errorf("ALTER TABLE: no such column %q", op.colName)
+	}
+
+	dt, err := parseDataType(op.newType)
+
+	if err != nil {
+		return err
+	}
+
+	// TODO: actually check if this would cause data loss
+	if table.columns[colIdx].dataType == AnyType && dt != AnyType {
+		return fmt.Errorf("ALTER COLUMN %q: changing type from ANY to %s could cause data loss", op.colName, dt)
+	}
+
+	table.columns[colIdx].dataType = dt
+
+	return nil
+}
+
+func (e *Engine) renameColumn(table *Table, op *RenameColumnOp) error {
+	for i, col := range table.columns {
+		if col.name == op.oldName {
+			table.columns[i].name = op.newName
+			return nil
+		}
+	}
+
+	return fmt.Errorf("ALTER TABLE: no such column %q", op.oldName)
+}
+
+func (e *Engine) renameTable(table *Table, op *RenameTableOp) error {
+	table.name = op.newName
+	return nil
+}
+
+func (e *Engine) checkRenameTable(oldName, newName string) error {
+	if oldName == newName {
+		return nil
+	}
+
+	rs, err := e.GetRootSchema()
+
+	if err != nil {
+		return err
+	}
+
+	if slices.Contains(rs.tableNames, newName) {
+		return fmt.Errorf("%q already exists", newName)
+	}
+
+	return nil
+}
+
+// updateSchemaTable replaces the schema entry for schemaName with the
+// current table definition, preserving its row ID in dblock_schema.
+func (e *Engine) updateSchemaTable(schemaName string, table *Table, rootPage PageID) error {
+	rootTree := NewBtree(e.pager, RootSchemaPageID)
+
+	keys, encodedRows, err := rootTree.All()
+
+	if err != nil {
+		return err
+	}
+
+	for i, encodedRow := range encodedRows {
+		row, err := DecodeRow(encodedRow)
+
+		if err != nil {
+			return err
+		}
+
+		if row.Values[0].(string) != schemaName {
+			continue
+		}
+
+		row.Values[0] = table.name
+		row.Values[1] = string(TableObject)
+		row.Values[2] = table.Encode()
+		row.Values[3] = int64(rootPage)
+
+		if err := rootTree.Insert(keys[i], row.Encode()); err != nil {
+			return err
+		}
+
+		return e.bumpSchemaVersion()
+	}
+
+	return fmt.Errorf("table '%v' does not exist", schemaName)
 }
 
 func (e *Engine) ExecCreate(stmt *CreateStmt) error {

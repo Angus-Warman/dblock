@@ -155,6 +155,16 @@ func (c *Conn) NewStmt(query string) (*Stmt, error) {
 		conn: c,
 	}
 
+	if parsed.Alter != nil {
+		alter, err := resolveAlter(parsed.Alter)
+
+		if err != nil {
+			return nil, err
+		}
+
+		stmt.execStmt = alter
+	}
+
 	if parsed.Create != nil {
 		create, err := resolveCreate(parsed.Create)
 

@@ -231,6 +231,38 @@ func resolveCreate(parsed *parser.CreateStmt) (*ExecStmt, error) {
 	return execStmt, nil
 }
 
+func resolveAlter(parsed *parser.AlterStmt) (*ExecStmt, error) {
+	alter := &AlterStmt{
+		ifExists:  parsed.HasIfExists(),
+		tableName: parsed.Name,
+	}
+
+	if parsed.AlterCol != nil {
+		alter.alterCol = &AlterColumnTypeOp{
+			colName: parsed.AlterCol.ColName,
+			newType: parsed.AlterCol.NewType,
+		}
+	}
+
+	if parsed.RenameCol != nil {
+		alter.renameCol = &RenameColumnOp{
+			oldName: parsed.RenameCol.OldName,
+			newName: parsed.RenameCol.NewName,
+		}
+	}
+
+	if parsed.RenameTbl != nil {
+		alter.renameTbl = &RenameTableOp{
+			newName: parsed.RenameTbl.NewName,
+		}
+	}
+
+	execStmt := &ExecStmt{
+		alterStmt: alter,
+	}
+	return execStmt, nil
+}
+
 func resolveDrop(parsed *parser.DropStmt) (*ExecStmt, error) {
 	execStmt := &ExecStmt{
 		dropStmt: &DropStmt{
