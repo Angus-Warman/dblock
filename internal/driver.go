@@ -110,9 +110,15 @@ type Tx struct {
 }
 
 func (c *Conn) NewTx() (*Tx, error) {
+	p, err := c.source.Begin()
+
+	if err != nil {
+		return nil, err
+	}
+
 	return &Tx{
 		conn:  c,
-		pager: c.source.Begin(),
+		pager: p,
 	}, nil
 }
 

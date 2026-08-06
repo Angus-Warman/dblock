@@ -43,7 +43,7 @@ func TestMetadata(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "dblock01", m.Dblock)
 	require.Equal(t, uint8(13), m.PageSizePower)
-	require.Equal(t, uint32(0), m.NumberOfPages)
+	require.Equal(t, uint32(2), m.NumberOfPages)
 	require.Equal(t, uint32(2), m.FileVersion)
 	require.Equal(t, uint32(2), m.SchemaVersion)
 	require.Equal(t, int64(0), m.Token)
@@ -58,4 +58,14 @@ func TestOpenFileTwice(t *testing.T) {
 	// Without closing, open second db. Should fail.
 	_, err := sql.Open("dblock", fp)
 	require.Error(t, err)
+}
+
+func TestSetPageSize(t *testing.T) {
+	db, fp := openFileDB(t)
+	assertExec(t, db, "PRAGMA page_size 8")
+	assertExec(t, db, "CREATE TABLE foo (a TEXT)")
+	require.NoError(t, db.Close())
+	stat, err := os.Stat(fp)
+	require.NoError(t, err)
+	require.Equal(t, int64(256), stat.Size())
 }

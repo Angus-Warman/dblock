@@ -203,7 +203,7 @@ func TestRecoverIgnoresTornTransaction(t *testing.T) {
 	// of that commit, and the two recovered frames own WalIDs 0 and 1.
 	_, ok := reopened.walIndex[2]
 	require.False(t, ok)
-	require.Equal(t, BlockOffset(2*frameSize), reopened.walEnd)
+	require.Equal(t, BlockOffset(2*reopened.frameSize()), reopened.walEnd)
 	require.Equal(t, WalID(2), reopened.maxWalID)
 }
 
@@ -234,7 +234,7 @@ func TestRecoverDiscardsUncommittedFrames(t *testing.T) {
 
 	_, ok := reopened.walIndex[1]
 	require.False(t, ok)
-	require.Equal(t, BlockOffset(frameSize), reopened.walEnd)
+	require.Equal(t, BlockOffset(reopened.frameSize()), reopened.walEnd)
 }
 
 // A torn checkpoint may leave a half-written block in main; recovery must

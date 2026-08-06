@@ -20,12 +20,13 @@ func newTestWal(t *testing.T) *storage.WalStorage {
 
 func TestStoragePagerRoundTrip(t *testing.T) {
 	src := &PagerSource{wal: newTestWal(t)}
-	pager := src.Begin()
+	pager, err := src.Begin()
+	require.NoError(t, err)
 
 	require.Equal(t, PageID(1), pager.NextID())
 	require.Equal(t, PageID(2), pager.NextID())
 
-	_, err := pager.GetPage(5)
+	_, err = pager.GetPage(5)
 	require.ErrorIs(t, err, ErrEmptyPage)
 
 	leaf := &Page{
@@ -48,7 +49,8 @@ func TestStoragePagerRoundTrip(t *testing.T) {
 
 func TestPagerMetadataRoundTrip(t *testing.T) {
 	src := &PagerSource{wal: newTestWal(t)}
-	pager := src.Begin()
+	pager, err := src.Begin()
+	require.NoError(t, err)
 
 	// A fresh database reports default metadata.
 	m, err := pager.GetMetadata()

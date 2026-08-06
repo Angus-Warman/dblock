@@ -37,8 +37,6 @@ func splitHeaderPageData(data []byte) ([]byte, []byte) {
 	return data[:metadata.Length], data[metadata.Length:]
 }
 
-const PageSize = 8 * 1024
-
 const (
 	magicLeaf  = 0x4C454146 // "LEAF"
 	magicInt   = 0x494E5445 // "INTE"
@@ -120,11 +118,9 @@ type Page struct {
 }
 
 // Layout: header | slot table (fixed-width, front-to-back) | data (back-to-front)
-func (p *Page) Encode() ([]byte, error) {
-	pageSize := PageSize
-
+func (p *Page) Encode(pageSize int) ([]byte, error) {
 	if p.ID == RootSchemaPageID {
-		pageSize = PageSize - metadata.Length
+		pageSize -= metadata.Length
 	}
 
 	var s slot

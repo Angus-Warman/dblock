@@ -18,7 +18,7 @@ type BlockOffset int64
 type WalID int64
 type TxID int64
 
-const BlockSize = 1024 * 8
+const BlockSize = 1024 * 8 // default block size (2^13), overridden per-instance from metadata
 
 type TxStorage struct {
 	id          TxID
@@ -106,6 +106,7 @@ type WalStorage struct {
 	walEnd           BlockOffset
 	nextBlockID      BlockID
 	committedTxCount int
+	blockSize        int
 }
 
 // Checkpointing policy: a checkpoint is triggered once 100 transactions have
@@ -151,6 +152,13 @@ func OpenWalStorage(dsn string) (*WalStorage, error) {
 }
 
 func NewWalStorage(main File, wal File) (*WalStorage, error) {
+	// The page size is fixed once the first page is written, so the block size
+	// can be read straight out of the metadata header at the start of main.
+	blockSize, err := detectBlockSize(main)
+	if err != nil {
+		return nil, err
+	}
+
 	// Reopened files may already hold pages in main; never allocate below them.
 	nextBlockID := BlockID(1)
 
@@ -160,7 +168,7 @@ func NewWalStorage(main File, wal File) (*WalStorage, error) {
 		return nil, err
 	}
 
-	if n := BlockID(size / BlockSize); n > nextBlockID {
+	if n := BlockID(size / int64(blockSize)); n > nextBlockID {
 		nextBlockID = n
 	}
 
@@ -172,6 +180,7 @@ func NewWalStorage(main File, wal File) (*WalStorage, error) {
 		wal:           wal,
 		maxWalID:      0,
 		nextBlockID:   nextBlockID,
+		blockSize:     blockSize,
 	}
 
 	if err := s.Recover(); err != nil {
@@ -209,7 +218,7 @@ func (p *WalStorage) Recover() error {
 	}
 
 	header := make([]byte, frameHeaderSize)
-	buf := make([]byte, BlockSize)
+	buf := make([]byte, p.blockSize)
 	pendingIndex := make(map[BlockID]WalID)
 	pendingOffsets := make(map[WalID]BlockOffset)
 	var offset BlockOffset
@@ -224,7 +233,7 @@ func (p *WalStorage) Recover() error {
 		commitMarker := binary.BigEndian.Uint64(header[8:16])
 		storedChecksum := uint32(binary.BigEndian.Uint64(header[16:24]))
 
-		if int64(offset)+frameSize > size {
+		if int64(offset)+int64(p.frameSize()) > size {
 			break // torn payload, stop here
 		}
 		if _, err := p.wal.ReadAt(buf, int64(offset+frameHeaderSize)); err != nil {
@@ -239,7 +248,7 @@ func (p *WalStorage) Recover() error {
 		p.maxWalID++
 		pendingIndex[blockID] = walID
 		pendingOffsets[walID] = offset
-		offset += frameSize
+		offset += BlockOffset(p.frameSize())
 
 		if commitMarker != 0 {
 			// The transaction is committed: everything accumulated since the
@@ -298,14 +307,44 @@ func (w *WalStorage) NextBlockID() BlockID {
 	return w.nextBlockID
 }
 
+// detectBlockSize reads the page size from main's metadata header, falling back
+// to the default for a database whose first page has not been written yet.
+func detectBlockSize(main File) (int, error) {
+	size, err := main.Size()
+
+	if err != nil {
+		return 0, err
+	}
+
+	if size < metadata.Length {
+		return BlockSize, nil
+	}
+
+	buf := make([]byte, metadata.Length)
+
+	if _, err := main.ReadAt(buf, 0); err != nil {
+		return 0, err
+	}
+
+	m, err := metadata.Decode(buf)
+
+	if err != nil {
+		return 0, err
+	}
+
+	return m.PageSize(), nil
+}
+
 // BlockID(8) + dbSizeAfter(8) + checksum(8).
 const frameHeaderSize = 24
 
-const frameSize = frameHeaderSize + BlockSize
+func (p *WalStorage) frameSize() int {
+	return frameHeaderSize + p.blockSize
+}
 
-func pageOffset(id BlockID) (BlockOffset, BlockOffset) {
-	start := id * BlockSize
-	return BlockOffset(start), BlockOffset(start + BlockSize)
+func (p *WalStorage) pageOffset(id BlockID) (BlockOffset, BlockOffset) {
+	start := BlockOffset(id) * BlockOffset(p.blockSize)
+	return start, start + BlockOffset(p.blockSize)
 }
 
 var ErrEmptyBlock = errors.New("empty block")
@@ -320,7 +359,7 @@ func (p *WalStorage) GetBlock(id BlockID, toMax WalID) ([]byte, error) {
 	walID, inWAL := p.walIndex[id]
 
 	if inWAL && walID < toMax {
-		buf := make([]byte, BlockSize)
+		buf := make([]byte, p.blockSize)
 		if _, err := p.wal.ReadAt(buf, int64(p.walOffsets[walID]+frameHeaderSize)); err != nil {
 			return nil, fmt.Errorf("GetPage: %w", err)
 		}
@@ -328,7 +367,7 @@ func (p *WalStorage) GetBlock(id BlockID, toMax WalID) ([]byte, error) {
 	}
 
 	// Else get from main
-	start, end := pageOffset(id)
+	start, end := p.pageOffset(id)
 	mainSize, err := p.main.Size()
 
 	if err != nil {
@@ -339,7 +378,7 @@ func (p *WalStorage) GetBlock(id BlockID, toMax WalID) ([]byte, error) {
 		return nil, ErrEmptyBlock
 	}
 
-	buf := make([]byte, BlockSize)
+	buf := make([]byte, p.blockSize)
 	if _, err := p.main.ReadAt(buf, int64(start)); err != nil {
 		return nil, fmt.Errorf("GetPage: %w", err)
 	}
@@ -362,9 +401,15 @@ func (p *WalStorage) PutBlocks(blocks []Block) error {
 		return nil
 	}
 
+	// A brand-new database may configure its page size before the first block
+	// is ever written; adopt the resulting block size for every frame.
+	if p.nextBlockID <= 1 && len(blocks[0].Buf) != p.blockSize {
+		p.blockSize = len(blocks[0].Buf)
+	}
+
 	for _, block := range blocks {
-		if len(block.Buf) != BlockSize {
-			return fmt.Errorf("PutBlocks: block %d has size %d, want %d", block.ID, len(block.Buf), BlockSize)
+		if len(block.Buf) != p.blockSize {
+			return fmt.Errorf("PutBlocks: block %d has size %d, want %d", block.ID, len(block.Buf), p.blockSize)
 		}
 	}
 
@@ -397,7 +442,7 @@ func (p *WalStorage) PutBlocks(blocks []Block) error {
 		if block.ID >= p.nextBlockID {
 			p.nextBlockID = block.ID + 1
 		}
-		offset += frameSize
+		offset += BlockOffset(p.frameSize())
 	}
 
 	if err := p.wal.Sync(); err != nil {
@@ -434,10 +479,10 @@ func (p *WalStorage) PutMetadata(m *metadata.Metadata) error {
 			return err
 		}
 
-		buf = make([]byte, BlockSize)
+		buf = make([]byte, p.blockSize)
 	}
 
-	full := make([]byte, 0, BlockSize)
+	full := make([]byte, 0, p.blockSize)
 	full = append(full, m.Encode()...)
 	full = append(full, buf[metadata.Length:]...)
 
@@ -452,7 +497,7 @@ func (p *WalStorage) ShouldCheckpoint() bool {
 		return true
 	}
 
-	numWalPages := p.walEnd / frameSize
+	numWalPages := p.walEnd / BlockOffset(p.frameSize())
 
 	return numWalPages > checkpointWalPageLimit
 }
@@ -486,11 +531,11 @@ func (p *WalStorage) Checkpoint() error {
 		if walID >= gate {
 			continue // an active TxStorage still needs this version
 		}
-		buf := make([]byte, BlockSize)
+		buf := make([]byte, p.blockSize)
 		if _, err := p.wal.ReadAt(buf, int64(p.walOffsets[walID]+frameHeaderSize)); err != nil {
 			return fmt.Errorf("Checkpoint: %w", err)
 		}
-		start, _ := pageOffset(id)
+		start, _ := p.pageOffset(id)
 		if _, err := p.main.WriteAt(buf, int64(start)); err != nil {
 			return fmt.Errorf("Checkpoint: %w", err)
 		}
@@ -514,7 +559,7 @@ func (p *WalStorage) Checkpoint() error {
 		if walID < gate {
 			continue
 		}
-		buf := make([]byte, frameSize)
+		buf := make([]byte, p.frameSize())
 		if _, err := p.wal.ReadAt(buf, int64(p.walOffsets[walID])); err != nil {
 			return fmt.Errorf("Checkpoint: %w", err)
 		}
@@ -531,7 +576,7 @@ func (p *WalStorage) Checkpoint() error {
 		}
 		newIndex[kf.id] = kf.walID
 		newOffsets[kf.walID] = offset
-		offset += frameSize
+		offset += BlockOffset(p.frameSize())
 	}
 
 	if err := p.wal.Truncate(int64(offset)); err != nil {

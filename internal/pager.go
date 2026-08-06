@@ -35,17 +35,29 @@ func (s *PagerSource) Close() error {
 	return s.wal.Close()
 }
 
-func (s *PagerSource) Begin() *StoragePager {
+func (s *PagerSource) Begin() (*StoragePager, error) {
 	tx := s.wal.NewTxStorage()
-	return &StoragePager{
+
+	p := &StoragePager{
 		store:  tx,
 		nextID: PageID(tx.NextBlockID()),
 	}
+
+	m, err := p.GetMetadata()
+
+	if err != nil {
+		return nil, err
+	}
+
+	p.pageSize = m.PageSize()
+
+	return p, nil
 }
 
 type StoragePager struct {
-	store  *storage.TxStorage
-	nextID PageID
+	store    *storage.TxStorage
+	nextID   PageID
+	pageSize int
 }
 
 // GetPage implements [Pager].
@@ -83,6 +95,11 @@ func (p *StoragePager) GetMetadata() (*metadata.Metadata, error) {
 }
 
 func (p *StoragePager) PutMetadata(m *metadata.Metadata) error {
+	m.NumberOfPages = uint32(p.store.NextBlockID())
+	m.CalculateChecksum()
+
+	blockSize := m.PageSize()
+
 	buf, err := p.store.GetBlock(storage.BlockID(RootSchemaPageID))
 
 	if err != nil {
@@ -91,18 +108,19 @@ func (p *StoragePager) PutMetadata(m *metadata.Metadata) error {
 		}
 
 		// No root page yet: write the metadata ahead of an empty page region.
-		buf = make([]byte, PageSize-metadata.Length)
+		buf = make([]byte, blockSize-metadata.Length)
 	} else {
 		_, buf = splitHeaderPageData(buf)
 	}
 
 	p.store.PutBlock(storage.BlockID(RootSchemaPageID), joinHeaderPageData(m, buf))
+	p.pageSize = blockSize
 	return nil
 }
 
 // PutPage implements [Pager].
 func (p *StoragePager) PutPage(id PageID, page *Page) error {
-	buf, err := page.Encode()
+	buf, err := page.Encode(p.pageSize)
 
 	if err != nil {
 		return err

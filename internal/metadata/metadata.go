@@ -24,12 +24,17 @@ const headerMagic = "dblock01"
 const Length = 100
 const padding = 67
 
+// PageSize returns the database page size in bytes, 2 ^ PageSizePower.
+func (m *Metadata) PageSize() int {
+	return 1 << m.PageSizePower
+}
+
 func New() *Metadata {
 	m := &Metadata{
 		Dblock:        headerMagic,
 		FileVersion:   1,
 		SchemaVersion: 1,
-		PageSizePower: 13,
+		PageSizePower: 13, // 8 KB
 		NumberOfPages: 0,
 		Token:         0,
 	}

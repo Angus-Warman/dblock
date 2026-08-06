@@ -145,15 +145,28 @@ func (e *Engine) execPragma(stmt *PragmaStmt) error {
 		m.Token = v
 
 	case pragma.PageSizeProperty:
-		v, err := strconv.ParseUint(stmt.value, 10, 32)
+		v, err := strconv.ParseInt(stmt.value, 10, 64)
 
 		if err != nil {
 			return fmt.Errorf("execPragma page_size: %w", err)
 		}
 
-		if v != PageSize {
-			return fmt.Errorf("execPragma page_size: unsupported page size %d", v)
+		if m.NumberOfPages != 0 {
+			return fmt.Errorf("page_size can only be set before first page write")
 		}
+
+		min := int64(8)  // 256 bytes
+		max := int64(22) // 4 MB
+
+		if v < min {
+			return fmt.Errorf("min page size %v", min)
+		}
+
+		if v > max {
+			return fmt.Errorf("max page size %v", max)
+		}
+
+		m.PageSizePower = uint8(v)
 
 	default:
 		return fmt.Errorf("execPragma: unsupported pragma %q", stmt.property)
@@ -196,7 +209,7 @@ func (e *Engine) queryPragma(stmt *PragmaStmt) (Scanner, error) {
 		val = m.Token
 
 	case pragma.PageSizeProperty:
-		val = int64(PageSize)
+		val = int64(m.PageSize())
 
 	default:
 		return nil, fmt.Errorf("queryPragma: unsupported pragma %q", stmt.property)
