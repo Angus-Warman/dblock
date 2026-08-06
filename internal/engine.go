@@ -1,6 +1,7 @@
 package internal
 
 import (
+	"dblock2/internal/metadata"
 	"dblock2/internal/pragma"
 	"fmt"
 	"slices"
@@ -170,6 +171,24 @@ func (e *Engine) queryPragma(stmt *PragmaStmt) (Scanner, error) {
 		return nil, err
 	}
 
+	if stmt.property == pragma.ReadMetadata {
+		rows := [][]any{
+			{"dblock", m.Dblock},
+			{"file_version", int64(m.FileVersion)},
+			{"schema_version", int64(m.SchemaVersion)},
+			{"page_size_power", int64(m.PageSizePower)},
+			{"number_of_pages", int64(m.NumberOfPages)},
+			{"token", m.Token},
+			{"checksum", int64(m.Checksum)},
+		}
+
+		if len(rows) != metadata.NumProperties {
+			return nil, fmt.Errorf("should have %v properties", metadata.NumProperties)
+		}
+
+		return NewCustomScanner([]string{"property", "value"}, rows), nil
+	}
+
 	var val any
 
 	switch stmt.property {
@@ -183,7 +202,7 @@ func (e *Engine) queryPragma(stmt *PragmaStmt) (Scanner, error) {
 		return nil, fmt.Errorf("queryPragma: unsupported pragma %q", stmt.property)
 	}
 
-	return NewPragmaScanner(stmt.property, val), nil
+	return NewCustomScanner([]string{string(stmt.property)}, [][]any{{val}}), nil
 }
 
 func (e *Engine) querySelect(stmt *SelectStmt, args []any) (Scanner, error) {

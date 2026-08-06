@@ -7,6 +7,7 @@ type Property string
 const (
 	PageSizeProperty = "page_size"
 	TokenProperty    = "token"
+	ReadMetadata     = "read_metadata"
 )
 
 func Parse(s string) (Property, error) {
@@ -17,7 +18,7 @@ func Parse(s string) (Property, error) {
 	}
 
 	switch k {
-	case PageSizeProperty, TokenProperty:
+	case PageSizeProperty, TokenProperty, ReadMetadata:
 		return k, nil
 	}
 

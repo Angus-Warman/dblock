@@ -18,6 +18,8 @@ type Metadata struct {
 	Checksum uint32 // 96-99
 }
 
+const NumProperties = 7 // Make sure to increment this
+
 const headerMagic = "dblock01"
 const Length = 100
 const padding = 67
