@@ -30,15 +30,32 @@ func OpenDiskFile(path string) (*DiskFile, error) {
 	return &DiskFile{f: f}, nil
 }
 
-func (d *DiskFile) Close() error {
+func (f *DiskFile) Close() error {
 	// Unlocking is optional, closing the fd releases the flock lock
-	err := unix.Flock(int(d.f.Fd()), unix.LOCK_UN)
+	err := unix.Flock(int(f.f.Fd()), unix.LOCK_UN)
 
 	if err != nil {
 		return err
 	}
 
-	return d.f.Close()
+	size, err := f.Size()
+
+	if err != nil {
+		return err
+	}
+
+	err = f.f.Close()
+
+	if err != nil {
+		return err
+	}
+
+	if size == 0 {
+		// Closing an empty file: delete
+		return os.Remove(f.f.Name())
+	}
+
+	return nil
 }
 
 func (f *DiskFile) Exists() (bool, error) {

@@ -16,7 +16,7 @@ import (
 func main() {
 	fmt.Println("Starting...")
 
-	db, err := sql.Open("dblock", ":memory:")
+	db, err := sql.Open("dblock", "data.db")
 	check(err)
 	defer db.Close()
 
@@ -37,8 +37,8 @@ func main() {
 		numWorkers            = 10
 		numReaders            = 4
 		startingBalance       = 1000
-		transfersPerGoroutine = 10
-		testDuration          = 5 * time.Second
+		transfersPerGoroutine = 50
+		testDuration          = 30 * time.Second
 	)
 	accountSum := numAccounts * startingBalance
 
@@ -80,8 +80,7 @@ func main() {
 				}
 				amount := rng.Intn(50) + 1
 				fmt.Printf("%v [%v/%v] transfer: %v from %v to %v\n", id, j+1, transfersPerGoroutine, amount, from, to)
-				// forceRollback := rng.Intn(10) == 0 // 10% intentional rollback
-				forceRollback := false
+				forceRollback := rng.Intn(10) == 0 // 10% intentional rollback
 
 				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 				err := doTransfer(ctx, db, from, to, amount, forceRollback)
@@ -191,13 +190,15 @@ func doTransfer(ctx context.Context, db *sql.DB, from, to string, amount int, fo
 	if _, err := tx.ExecContext(ctx, "UPDATE accounts SET balance = balance + ? WHERE owner = ?", amount, to); err != nil {
 		return err
 	}
+
+	if forceRollback {
+		return tx.Rollback()
+	}
+
 	if _, err := tx.ExecContext(ctx, `INSERT INTO transactions (from_account, to_account, amount) VALUES (?, ?, ?)`, from, to, amount); err != nil {
 		return err
 	}
 
-	if forceRollback {
-		return fmt.Errorf("intentional rollback")
-	}
 	return tx.Commit()
 }
 

@@ -62,6 +62,13 @@ func (s *TxStorage) Commit() error {
 
 	s.dirtyBlocks = make(map[BlockID]Block)
 	s.wal.forgetTx(s.id)
+
+	if s.wal.ShouldCheckpoint() {
+		if err := s.wal.Checkpoint(); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -88,17 +95,26 @@ func (s *TxStorage) ReserveBlock(id BlockID) {
 }
 
 type WalStorage struct {
-	mu            sync.Mutex
-	walIndex      map[BlockID]WalID
-	walOffsets    map[WalID]BlockOffset
-	txUsingWalIDs map[TxID]WalID
-	main          File
-	wal           File
-	maxWalID      WalID
-	nextTxID      TxID
-	walEnd        BlockOffset
-	nextBlockID   BlockID
+	mu               sync.Mutex
+	walIndex         map[BlockID]WalID
+	walOffsets       map[WalID]BlockOffset
+	txUsingWalIDs    map[TxID]WalID
+	main             File
+	wal              File
+	maxWalID         WalID
+	nextTxID         TxID
+	walEnd           BlockOffset
+	nextBlockID      BlockID
+	committedTxCount int
 }
+
+// Checkpointing policy: a checkpoint is triggered once 100 transactions have
+// committed since the last checkpoint, or as soon as the WAL exceeds 100
+// pages (frames).
+const (
+	checkpointTxInterval   = 100
+	checkpointWalPageLimit = 100
+)
 
 func (s *WalStorage) Close() error {
 	checkpointErr := s.Checkpoint()
@@ -389,6 +405,7 @@ func (p *WalStorage) PutBlocks(blocks []Block) error {
 	}
 
 	p.walEnd = offset
+	p.committedTxCount++
 	return nil
 }
 
@@ -425,6 +442,19 @@ func (p *WalStorage) PutMetadata(m *metadata.Metadata) error {
 	full = append(full, buf[metadata.Length:]...)
 
 	return p.PutBlocks([]Block{{ID: BlockID(0), Buf: full}})
+}
+
+func (p *WalStorage) ShouldCheckpoint() bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if p.committedTxCount > checkpointTxInterval {
+		return true
+	}
+
+	numWalPages := p.walEnd / frameSize
+
+	return numWalPages > checkpointWalPageLimit
 }
 
 // Checkpoint copies committed WAL frames that no active TxStorage depends on
@@ -530,6 +560,8 @@ func (p *WalStorage) Checkpoint() error {
 	if err := p.main.Sync(); err != nil {
 		return fmt.Errorf("Checkpoint: %w", err)
 	}
+
+	p.committedTxCount = 0
 	return nil
 }
 
