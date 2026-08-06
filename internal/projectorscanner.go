@@ -10,6 +10,7 @@ type ProjectorScanner struct {
 	columnIdx  []int
 	exprs      []*Expr
 	outColumns []string
+	args       []any
 }
 
 // Columns implements [Scanner].
@@ -30,7 +31,7 @@ func (p *ProjectorScanner) Next() (key []byte, row Row, ok bool, err error) {
 
 	for i := range values {
 		if p.exprs[i] != nil {
-			values[i], err = evalExpr(p.exprs[i], columns, fullRow.Values)
+			values[i], err = evalExpr(p.exprs[i], columns, fullRow.Values, p.args)
 
 			if err != nil {
 				return nil, Row{}, false, err
@@ -45,7 +46,7 @@ func (p *ProjectorScanner) Next() (key []byte, row Row, ok bool, err error) {
 	return key, Row{Values: values}, true, nil
 }
 
-func NewProjectorScanner(base Scanner, stmt *SelectStmt) (Scanner, error) {
+func NewProjectorScanner(base Scanner, stmt *SelectStmt, args []any) (Scanner, error) {
 	if base == nil {
 		return nil, fmt.Errorf("projector: base scanner is nil")
 	}
@@ -109,5 +110,6 @@ func NewProjectorScanner(base Scanner, stmt *SelectStmt) (Scanner, error) {
 		columnIdx:  columnIdx,
 		exprs:      exprs,
 		outColumns: outColumns,
+		args:       args,
 	}, nil
 }

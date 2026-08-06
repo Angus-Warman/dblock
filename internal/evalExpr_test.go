@@ -15,11 +15,12 @@ func TestEvalLiterals(t *testing.T) {
 		{name: "int", expr: Expr{Kind: IntExpr, Int: 42}, want: int64(42)},
 		{name: "real", expr: Expr{Kind: RealExpr, Real: 3.5}, want: 3.5},
 		{name: "text", expr: Expr{Kind: TextExpr, Text: "hi"}, want: "hi"},
+		{name: "arg", expr: Expr{Kind: ArgExpr}, want: "sure"},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := evalExpr(&tt.expr, nil, nil)
+			got, err := evalExpr(&tt.expr, nil, nil, []any{"sure"})
 			require.NoError(t, err)
 			require.Equal(t, tt.want, got)
 		})
@@ -28,14 +29,14 @@ func TestEvalLiterals(t *testing.T) {
 
 func TestEvalColumn(t *testing.T) {
 	expr := &Expr{Kind: ColumnExpr, Column: "a"}
-	got, err := evalExpr(expr, []string{"a", "b"}, []any{3.5, 4.5})
+	got, err := evalExpr(expr, []string{"a", "b"}, []any{3.5, 4.5}, nil)
 	require.NoError(t, err)
 	require.Equal(t, 3.5, got)
 }
 
 func TestEvalColumnUnknown(t *testing.T) {
 	expr := &Expr{Kind: ColumnExpr, Column: "nope"}
-	_, err := evalExpr(expr, []string{"a"}, []any{1})
+	_, err := evalExpr(expr, []string{"a"}, []any{1}, nil)
 	require.Error(t, err)
 }
 
@@ -116,10 +117,10 @@ func TestEvalResolvedExpression(t *testing.T) {
 	p := mustParse(t, "SELECT a * b FROM foo")
 	expr := p.Select.List.Items[0].Expr
 
-	resolved, err := resolveExpr(expr)
+	resolved, err := NewExprMachine().resolveExpr(expr)
 	require.NoError(t, err)
 
-	got, err := evalExpr(resolved, []string{"a", "b"}, []any{3.5, 4.5})
+	got, err := evalExpr(resolved, []string{"a", "b"}, []any{3.5, 4.5}, nil)
 	require.NoError(t, err)
 	require.Equal(t, 15.75, got)
 }
@@ -127,7 +128,7 @@ func TestEvalResolvedExpression(t *testing.T) {
 func TestResolveProjectionExpression(t *testing.T) {
 	p := mustParse(t, "SELECT a * b FROM foo")
 
-	proj, err := resolveProjection(p.Select.List.Items)
+	proj, err := NewExprMachine().resolveProjection(p.Select.List.Items)
 	require.NoError(t, err)
 	require.Len(t, proj, 1)
 	require.NotNil(t, proj[0].expr)
@@ -136,7 +137,7 @@ func TestResolveProjectionExpression(t *testing.T) {
 func TestResolveProjectionPlainColumn(t *testing.T) {
 	p := mustParse(t, "SELECT a FROM foo")
 
-	proj, err := resolveProjection(p.Select.List.Items)
+	proj, err := NewExprMachine().resolveProjection(p.Select.List.Items)
 	require.NoError(t, err)
 	require.Len(t, proj, 1)
 	require.Nil(t, proj[0].expr)
@@ -146,7 +147,7 @@ func TestResolveProjectionPlainColumn(t *testing.T) {
 func TestExprString(t *testing.T) {
 	p := mustParse(t, "SELECT a * b FROM foo")
 
-	resolved, err := resolveExpr(p.Select.List.Items[0].Expr)
+	resolved, err := NewExprMachine().resolveExpr(p.Select.List.Items[0].Expr)
 	require.NoError(t, err)
 
 	require.Equal(t, "(a * b)", exprString(resolved))

@@ -9,7 +9,7 @@ import (
 // evalExpr evaluates a resolved expression tree against a single row. columns
 // names each value in values (the base scanner's column list), so column
 // references can be resolved by name.
-func evalExpr(expr *Expr, columns []string, values []any) (any, error) {
+func evalExpr(expr *Expr, columns []string, values []any, args []any) (any, error) {
 	if expr == nil {
 		return nil, fmt.Errorf("eval: nil expression")
 	}
@@ -27,6 +27,13 @@ func evalExpr(expr *Expr, columns []string, values []any) (any, error) {
 	case TextExpr:
 		return expr.Text, nil
 
+	case ArgExpr:
+		if expr.ArgIndex >= len(args) {
+			return nil, fmt.Errorf("eval: missing argument for placeholder %d", expr.ArgIndex+1)
+		}
+
+		return args[expr.ArgIndex], nil
+
 	case ColumnExpr:
 		idx := findColumn(columns, expr.Column)
 
@@ -37,13 +44,13 @@ func evalExpr(expr *Expr, columns []string, values []any) (any, error) {
 		return values[idx], nil
 
 	case BinaryKind:
-		left, err := evalExpr(expr.Binary.Left, columns, values)
+		left, err := evalExpr(expr.Binary.Left, columns, values, args)
 
 		if err != nil {
 			return nil, err
 		}
 
-		right, err := evalExpr(expr.Binary.Right, columns, values)
+		right, err := evalExpr(expr.Binary.Right, columns, values, args)
 
 		if err != nil {
 			return nil, err
@@ -261,6 +268,9 @@ func exprString(expr *Expr) string {
 		}
 
 		return string(expr.FuncCall.Name) + "(" + strings.Join(args, ", ") + ")"
+
+	case ArgExpr:
+		return "?"
 	}
 
 	return ""

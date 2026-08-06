@@ -200,6 +200,7 @@ type Factor struct {
 	Hex     string    `parser:"| @Hex"`
 	Str     string    `parser:"| @String"`
 	Op      string    `parser:"| @Op | @Cmp | @Logic"`
+	Arg     string    `parser:"| @Arg"`
 	Column  string    `parser:"| @Ident"`
 }
 

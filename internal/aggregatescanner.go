@@ -36,9 +36,10 @@ type AggregateScanner struct {
 	outIdx    []int
 
 	nextGroup int
+	args      []any
 }
 
-func NewAggregateScanner(base Scanner, stmt *SelectStmt) (*AggregateScanner, error) {
+func NewAggregateScanner(base Scanner, stmt *SelectStmt, args []any) (*AggregateScanner, error) {
 	if base == nil {
 		return nil, fmt.Errorf("func: base scanner is nil")
 	}
@@ -103,6 +104,7 @@ func NewAggregateScanner(base Scanner, stmt *SelectStmt) (*AggregateScanner, err
 		ungrouped:    len(stmt.groupBy) == 0,
 		outIsFunc:    outIsFunc,
 		outIdx:       outIdx,
+		args:         args,
 	}
 
 	if err := s.bufferGroups(base); err != nil {
@@ -161,7 +163,7 @@ func (s *AggregateScanner) bufferGroups(base Scanner) error {
 			}
 
 			for i, pt := range s.passThroughs {
-				val, err := evalExpr(pt.expr, s.baseColumns, row.Values)
+				val, err := evalExpr(pt.expr, s.baseColumns, row.Values, s.args)
 				if err != nil {
 					return fmt.Errorf("func: pass-through %q: %w", pt.name, err)
 				}
@@ -203,7 +205,7 @@ func (s *AggregateScanner) groupKey(row Row) (string, error) {
 	parts := make([]string, len(s.groupExprs))
 
 	for i, expr := range s.groupExprs {
-		val, err := evalExpr(expr, s.baseColumns, row.Values)
+		val, err := evalExpr(expr, s.baseColumns, row.Values, s.args)
 		if err != nil {
 			return "", fmt.Errorf("func: group by: %w", err)
 		}
@@ -229,7 +231,7 @@ func (s *AggregateScanner) accumulate(g *funcGroup, row Row) error {
 			return fmt.Errorf("func: %s requires an argument", fun.Name)
 		}
 
-		val, err := evalExpr(&fun.Args[0], s.baseColumns, row.Values)
+		val, err := evalExpr(&fun.Args[0], s.baseColumns, row.Values, s.args)
 		if err != nil {
 			return fmt.Errorf("func: %s: %w", fun.Name, err)
 		}

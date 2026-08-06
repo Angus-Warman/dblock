@@ -16,31 +16,33 @@ func resolveSelect(parsed *parser.SelectStmt) (*QueryStmt, error) {
 		return nil, fmt.Errorf("table name empty")
 	}
 
-	projection, err := resolveProjection(parsed.List.Items)
+	m := NewExprMachine()
+
+	projection, err := m.resolveProjection(parsed.List.Items)
 
 	if err != nil {
 		return nil, err
 	}
 
-	joins, err := resolveJoins(parsed.Joins)
+	joins, err := m.resolveJoins(parsed.Joins)
 
 	if err != nil {
 		return nil, err
 	}
 
-	orderBy, err := resolveOrders(parsed.OrderBy, parsed.TableName, parsed.Alias)
+	where, err := m.resolveWhere(parsed.Where)
 
 	if err != nil {
 		return nil, err
 	}
 
-	where, err := resolveWhere(parsed.Where)
+	groupBy, err := m.resolveGroupBy(parsed.GroupBy)
 
 	if err != nil {
 		return nil, err
 	}
 
-	groupBy, err := resolveGroupBy(parsed.GroupBy)
+	orderBy, err := m.resolveOrders(parsed.OrderBy, parsed.TableName, parsed.Alias)
 
 	if err != nil {
 		return nil, err
@@ -62,12 +64,12 @@ func resolveSelect(parsed *parser.SelectStmt) (*QueryStmt, error) {
 	return queryStmt, nil
 }
 
-func resolveWhere(w *parser.WhereClause) (*Expr, error) {
+func (m *exprMachine) resolveWhere(w *parser.WhereClause) (*Expr, error) {
 	if w == nil {
 		return nil, nil
 	}
 
-	return resolveExpr(&w.Expr)
+	return m.resolveExpr(&w.Expr)
 }
 
 func parseJoinMode(s string) (JoinMode, error) {
@@ -89,7 +91,7 @@ func parseJoinMode(s string) (JoinMode, error) {
 	return mode, fmt.Errorf("join: could not parse %q as join type", s)
 }
 
-func resolveJoins(parsed []parser.JoinClause) ([]JoinStmt, error) {
+func (m *exprMachine) resolveJoins(parsed []parser.JoinClause) ([]JoinStmt, error) {
 	joins := []JoinStmt{}
 
 	for _, j := range parsed {
@@ -103,7 +105,7 @@ func resolveJoins(parsed []parser.JoinClause) ([]JoinStmt, error) {
 			return nil, err
 		}
 
-		onExpr, err := resolveExpr(&j.On.Expr)
+		onExpr, err := m.resolveExpr(&j.On.Expr)
 
 		if err != nil {
 			return nil, fmt.Errorf("join: %w", err)
@@ -124,7 +126,7 @@ type OrderStmt struct {
 	IsDesc bool
 }
 
-func resolveOrders(parsed *parser.OrderByClause, tableName, alias string) ([]OrderStmt, error) {
+func (m *exprMachine) resolveOrders(parsed *parser.OrderByClause, tableName, alias string) ([]OrderStmt, error) {
 	if parsed == nil {
 		return nil, nil
 	}
@@ -132,7 +134,7 @@ func resolveOrders(parsed *parser.OrderByClause, tableName, alias string) ([]Ord
 	orders := []OrderStmt{}
 
 	for i, item := range parsed.Items {
-		expr, err := resolveExpr(&parsed.Items[i].Expr)
+		expr, err := m.resolveExpr(&parsed.Items[i].Expr)
 
 		if err != nil {
 			return nil, fmt.Errorf("group by: %w", err)
@@ -146,7 +148,7 @@ func resolveOrders(parsed *parser.OrderByClause, tableName, alias string) ([]Ord
 	return orders, nil
 }
 
-func resolveGroupBy(parsed *parser.GroupByClause) ([]*Expr, error) {
+func (m *exprMachine) resolveGroupBy(parsed *parser.GroupByClause) ([]*Expr, error) {
 	if parsed == nil {
 		return nil, nil
 	}
@@ -154,7 +156,7 @@ func resolveGroupBy(parsed *parser.GroupByClause) ([]*Expr, error) {
 	groups := []*Expr{}
 
 	for i := range parsed.Items {
-		expr, err := resolveExpr(&parsed.Items[i])
+		expr, err := m.resolveExpr(&parsed.Items[i])
 
 		if err != nil {
 			return nil, fmt.Errorf("group by: %w", err)
@@ -166,7 +168,7 @@ func resolveGroupBy(parsed *parser.GroupByClause) ([]*Expr, error) {
 	return groups, nil
 }
 
-func resolveProjection(items []parser.SelectItem) ([]ProjectedColumn, error) {
+func (m *exprMachine) resolveProjection(items []parser.SelectItem) ([]ProjectedColumn, error) {
 	projection := []ProjectedColumn{}
 
 	for _, item := range items {
@@ -181,7 +183,7 @@ func resolveProjection(items []parser.SelectItem) ([]ProjectedColumn, error) {
 			continue
 		}
 
-		expr, rerr := resolveExpr(item.Expr)
+		expr, rerr := m.resolveExpr(item.Expr)
 
 		if rerr != nil {
 			return nil, rerr
@@ -296,13 +298,15 @@ func resolveInsert(parsed *parser.InsertStmt) (*ExecStmt, error) {
 }
 
 func resolveUpdate(parsed *parser.UpdateStmt) (*ExecStmt, error) {
-	expr, err := resolveExpr(&parsed.Value)
+	m := NewExprMachine()
+
+	expr, err := m.resolveExpr(&parsed.Value)
 
 	if err != nil {
 		return nil, err
 	}
 
-	where, err := resolveWhere(parsed.Where)
+	where, err := m.resolveWhere(parsed.Where)
 
 	if err != nil {
 		return nil, err

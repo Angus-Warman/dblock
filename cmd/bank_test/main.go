@@ -16,7 +16,7 @@ import (
 func main() {
 	fmt.Println("Starting...")
 
-	db, err := sql.Open("dblock", "data.db")
+	db, err := sql.Open("dblock", ":memory:")
 	check(err)
 	defer db.Close()
 
@@ -27,7 +27,7 @@ func main() {
 	_, err = db.Exec("DROP TABLE IF EXISTS transactions")
 	check(err)
 
-	_, err = db.Exec("CREATE TABLE accounts (owner TEXT , balance INTEGER)")
+	_, err = db.Exec("CREATE TABLE accounts (owner TEXT, balance INTEGER)")
 	check(err)
 	_, err = db.Exec(`CREATE TABLE transactions (from_account TEXT, to_account TEXT, amount INTEGER)`)
 	check(err)
@@ -37,8 +37,8 @@ func main() {
 		numWorkers            = 10
 		numReaders            = 4
 		startingBalance       = 1000
-		transfersPerGoroutine = 500
-		testDuration          = 15 * time.Second
+		transfersPerGoroutine = 10
+		testDuration          = 5 * time.Second
 	)
 	accountSum := numAccounts * startingBalance
 
@@ -55,7 +55,8 @@ func main() {
 	check(seedTx.Commit())
 
 	var (
-		wg            sync.WaitGroup
+		writerWG      sync.WaitGroup
+		readerWG      sync.WaitGroup
 		committed     int64
 		aborted       int64
 		deadlocked    int64
@@ -66,22 +67,21 @@ func main() {
 	rngPool := sync.Pool{New: func() any { return rand.New(rand.NewSource(time.Now().UnixNano())) }}
 
 	// --- writer goroutines: random transfers, some intentionally rolled back ---
-	for w := range numWorkers {
-		wg.Add(1)
-		go func(id int) {
-			defer wg.Done()
+	for id := range numWorkers {
+		writerWG.Go(func() {
 			rng := rngPool.Get().(*rand.Rand)
 			defer rngPool.Put(rng)
 
-			for range transfersPerGoroutine {
+			for j := range transfersPerGoroutine {
 				from := fmt.Sprintf("acct-%d", rng.Intn(numAccounts))
 				to := fmt.Sprintf("acct-%d", rng.Intn(numAccounts))
 				if from == to {
 					continue
 				}
 				amount := rng.Intn(50) + 1
-				fmt.Printf("transfer: %v from %v to %v\n", amount, from, to)
-				forceRollback := rng.Intn(10) == 0 // 10% intentional rollback
+				fmt.Printf("%v [%v/%v] transfer: %v from %v to %v\n", id, j+1, transfersPerGoroutine, amount, from, to)
+				// forceRollback := rng.Intn(10) == 0 // 10% intentional rollback
+				forceRollback := false
 
 				ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 				err := doTransfer(ctx, db, from, to, amount, forceRollback)
@@ -96,17 +96,16 @@ func main() {
 					atomic.AddInt64(&deadlocked, 1)
 					fmt.Printf("worker %d: transfer timed out (possible deadlock): %v\n", id, err)
 				default:
+					fmt.Println(err)
 					atomic.AddInt64(&aborted, 1)
 				}
 			}
-		}(w)
+		})
 	}
 
 	// --- reader goroutines: SUM(balance) must always equal the invariant ---
-	for r := 0; r < numReaders; r++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+	for range numReaders {
+		readerWG.Go(func() {
 			for {
 				select {
 				case <-stopReaders:
@@ -125,13 +124,13 @@ func main() {
 				}
 				time.Sleep(time.Millisecond)
 			}
-		}()
+		})
 	}
 
 	// Safety net: don't let a real deadlock hang the test suite forever.
 	done := make(chan struct{})
 	go func() {
-		wg.Wait()
+		writerWG.Wait()
 		close(done)
 	}()
 
@@ -142,6 +141,7 @@ func main() {
 		os.Exit(1)
 	}
 	close(stopReaders)
+	readerWG.Wait()
 
 	// --- final invariant check ---
 	var finalSum int

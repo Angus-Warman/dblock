@@ -9,6 +9,7 @@ import (
 type FilterScanner struct {
 	base Scanner
 	expr *Expr
+	args []any
 }
 
 // Columns implements [Scanner].
@@ -25,7 +26,7 @@ func (w *FilterScanner) Next() (key []byte, row Row, ok bool, err error) {
 			return nil, Row{}, ok, err
 		}
 
-		val, err := evalExpr(w.expr, w.base.Columns(), row.Values)
+		val, err := evalExpr(w.expr, w.base.Columns(), row.Values, w.args)
 
 		if err != nil {
 			return nil, Row{}, false, err
@@ -43,7 +44,7 @@ func (w *FilterScanner) Next() (key []byte, row Row, ok bool, err error) {
 	}
 }
 
-func NewFilterScanner(base Scanner, expr *Expr) (Scanner, error) {
+func NewFilterScanner(base Scanner, expr *Expr, args []any) (Scanner, error) {
 	if base == nil {
 		return nil, fmt.Errorf("where: base scanner is nil")
 	}
@@ -55,5 +56,6 @@ func NewFilterScanner(base Scanner, expr *Expr) (Scanner, error) {
 	return &FilterScanner{
 		base: base,
 		expr: expr,
+		args: args,
 	}, nil
 }

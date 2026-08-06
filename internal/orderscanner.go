@@ -19,6 +19,7 @@ type OrderScanner struct {
 	base    Scanner
 	rows    []orderEntry
 	nextIdx int
+	args    []any
 }
 
 // Columns implements [Scanner].
@@ -37,7 +38,7 @@ func (s *OrderScanner) Next() (key []byte, row Row, ok bool, err error) {
 	return entry.key, entry.row, true, nil
 }
 
-func NewOrderScanner(base Scanner, stmt *SelectStmt) (Scanner, error) {
+func NewOrderScanner(base Scanner, stmt *SelectStmt, args []any) (Scanner, error) {
 	if base == nil {
 		return nil, fmt.Errorf("order: base scanner is nil")
 	}
@@ -70,7 +71,7 @@ func NewOrderScanner(base Scanner, stmt *SelectStmt) (Scanner, error) {
 
 	slices.SortStableFunc(rows, func(a, b orderEntry) int {
 		for _, order := range stmt.orders {
-			n, err := compareRows(a.row, b.row, columns, order)
+			n, err := compareRows(a.row, b.row, columns, order, args)
 
 			if err != nil {
 				// TODO
@@ -87,17 +88,18 @@ func NewOrderScanner(base Scanner, stmt *SelectStmt) (Scanner, error) {
 	return &OrderScanner{
 		base: base,
 		rows: rows,
+		args: args,
 	}, nil
 }
 
-func compareRows(a, b Row, columns []string, by OrderStmt) (int, error) {
-	aVal, err := evalExpr(by.Expr, columns, a.Values)
+func compareRows(a, b Row, columns []string, by OrderStmt, args []any) (int, error) {
+	aVal, err := evalExpr(by.Expr, columns, a.Values, args)
 
 	if err != nil {
 		return 0, err
 	}
 
-	bVal, err := evalExpr(by.Expr, columns, b.Values)
+	bVal, err := evalExpr(by.Expr, columns, b.Values, args)
 
 	if err != nil {
 		return 0, err

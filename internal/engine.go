@@ -41,7 +41,7 @@ func (e *Engine) Exec(stmt *ExecStmt, args []any) (insertedID int64, rowsAffecte
 	}
 
 	if stmt.updateStmt != nil {
-		rowsAffected, err := e.Update(stmt.updateStmt)
+		rowsAffected, err := e.Update(stmt.updateStmt, args)
 
 		if err != nil {
 			return -1, -1, err
@@ -200,7 +200,7 @@ func (e *Engine) querySelect(stmt *SelectStmt, args []any) (Scanner, error) {
 			return nil, err
 		}
 
-		scanner, err = NewJoinScanner(scanner, right, stmt, &join)
+		scanner, err = NewJoinScanner(scanner, right, stmt, &join, args)
 
 		if err != nil {
 			return nil, err
@@ -208,7 +208,7 @@ func (e *Engine) querySelect(stmt *SelectStmt, args []any) (Scanner, error) {
 	}
 
 	if stmt.where != nil {
-		scanner, err = NewFilterScanner(scanner, stmt.where)
+		scanner, err = NewFilterScanner(scanner, stmt.where, args)
 
 		if err != nil {
 			return nil, err
@@ -216,7 +216,7 @@ func (e *Engine) querySelect(stmt *SelectStmt, args []any) (Scanner, error) {
 	}
 
 	if hasAggregates(stmt) {
-		scanner, err = NewAggregateScanner(scanner, stmt)
+		scanner, err = NewAggregateScanner(scanner, stmt, args)
 
 		if err != nil {
 			return nil, err
@@ -224,7 +224,7 @@ func (e *Engine) querySelect(stmt *SelectStmt, args []any) (Scanner, error) {
 	}
 
 	if stmt.orders != nil {
-		scanner, err = NewOrderScanner(scanner, stmt)
+		scanner, err = NewOrderScanner(scanner, stmt, args)
 
 		if err != nil {
 			return nil, err
@@ -235,7 +235,7 @@ func (e *Engine) querySelect(stmt *SelectStmt, args []any) (Scanner, error) {
 		return scanner, nil
 	}
 
-	scanner, err = NewProjectorScanner(scanner, stmt)
+	scanner, err = NewProjectorScanner(scanner, stmt, args)
 
 	if err != nil {
 		return nil, err
@@ -392,7 +392,7 @@ func (e *Engine) Insert(stmt *InsertStmt, args []any) (insertedID int64, rowsAff
 
 // Update applies an expression to the target column of every row matching
 // the WHERE clause, returning the number of rows modified.
-func (e *Engine) Update(stmt *UpdateStmt) (int64, error) {
+func (e *Engine) Update(stmt *UpdateStmt, args []any) (int64, error) {
 	if stmt == nil {
 		return -1, fmt.Errorf("Update: nothing to update in statement")
 	}
@@ -433,7 +433,7 @@ func (e *Engine) Update(stmt *UpdateStmt) (int64, error) {
 		}
 
 		if stmt.where != nil {
-			val, err := evalExpr(stmt.where, info.columns, row.Values)
+			val, err := evalExpr(stmt.where, info.columns, row.Values, args)
 
 			if err != nil {
 				return -1, err
@@ -450,7 +450,7 @@ func (e *Engine) Update(stmt *UpdateStmt) (int64, error) {
 			}
 		}
 
-		val, err := evalExpr(stmt.expr, info.columns, row.Values)
+		val, err := evalExpr(stmt.expr, info.columns, row.Values, args)
 
 		if err != nil {
 			return -1, err

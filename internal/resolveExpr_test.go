@@ -48,7 +48,7 @@ func TestResolveExpr(t *testing.T) {
 		},
 	}
 
-	actual, err := resolveExpr(expr)
+	actual, err := NewExprMachine().resolveExpr(expr)
 
 	require.NoError(t, err)
 
@@ -77,7 +77,7 @@ func TestResolveMultiply(t *testing.T) {
 		},
 	}
 
-	actual, err := resolveExpr(expr)
+	actual, err := NewExprMachine().resolveExpr(expr)
 	require.NoError(t, err)
 	require.Equal(t, expected, actual)
 }

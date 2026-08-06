@@ -20,6 +20,7 @@ const (
 	// BoolExpr
 	BinaryKind
 	FuncKind
+	ArgExpr
 )
 
 type Expr struct {
@@ -33,6 +34,7 @@ type Expr struct {
 	Bool     bool
 	Binary   *BinaryExpr
 	FuncCall *FuncExpr
+	ArgIndex int
 }
 
 type FuncName string
@@ -105,10 +107,24 @@ var cmpAliases = map[string]Operator{
 	"OR":  Or,
 }
 
-// resolveExpr is the entrypoint: it takes the raw, flat parser.Expr (a
-// sequence of Factors as produced by the grammar) and resolves it into a
-// proper AST honoring operator precedence and associativity.
-func resolveExpr(input *parser.Expr) (*Expr, error) {
+// exprMachine resolves expressions and statement clauses into the internal
+// AST. A single exprMachine is created per statement so that ? placeholders
+// are numbered positionally across all clauses (projection, JOIN, WHERE,
+// GROUP BY, ORDER BY, UPDATE SET); expression sub-machines share its counter.
+type exprMachine struct {
+	factors []parser.Factor
+	pos     int
+	argIdx  *int
+}
+
+func NewExprMachine() *exprMachine {
+	return &exprMachine{argIdx: new(int)}
+}
+
+// resolveExpr resolves the raw, flat parser.Expr (a sequence of Factors as
+// produced by the grammar) into a proper AST honoring operator precedence
+// and associativity.
+func (m *exprMachine) resolveExpr(input *parser.Expr) (*Expr, error) {
 	if input == nil {
 		return nil, fmt.Errorf("resolveExpr: nil expr")
 	}
@@ -116,8 +132,11 @@ func resolveExpr(input *parser.Expr) (*Expr, error) {
 		return nil, fmt.Errorf("resolveExpr: empty expr")
 	}
 
-	m := &exprMachine{factors: input.Factors}
+	m.factors = input.Factors
+	m.pos = 0
+
 	expr, err := m.parseExpr(0)
+
 	if err != nil {
 		return nil, err
 	}
@@ -125,15 +144,6 @@ func resolveExpr(input *parser.Expr) (*Expr, error) {
 		return nil, fmt.Errorf("resolveExpr: unexpected token at %d, %+v", m.pos, m.factors[m.pos])
 	}
 	return expr, nil
-}
-
-// exprMachine walks a flat []parser.Factor and, via precedence climbing,
-// resolves it into a tree of Expr/BinaryExpr nodes. It's a small state
-// machine over a cursor position rather than a recursive grammar rule,
-// which keeps precedence-handling separate from parsing.
-type exprMachine struct {
-	factors []parser.Factor
-	pos     int
 }
 
 func (m *exprMachine) done() bool {
@@ -227,10 +237,10 @@ func (m *exprMachine) parsePrimary() (*Expr, error) {
 		return &Expr{Kind: StarExpr, Star: true}, nil
 
 	case f.Func != nil:
-		return resolveFuncCall(f.Func)
+		return m.resolveFuncCall(f.Func)
 
 	case f.SubExpr != nil:
-		sub := &exprMachine{factors: f.SubExpr.Factors}
+		sub := &exprMachine{factors: f.SubExpr.Factors, argIdx: m.argIdx}
 		expr, err := sub.parseExpr(0)
 		if err != nil {
 			return nil, err
@@ -256,12 +266,17 @@ func (m *exprMachine) parsePrimary() (*Expr, error) {
 	case f.Str != "":
 		return &Expr{Kind: TextExpr, Text: unquoteString(f.Str)}, nil
 
+	case f.Arg != "":
+		idx := *m.argIdx
+		*m.argIdx = idx + 1
+		return &Expr{Kind: ArgExpr, ArgIndex: idx}, nil
+
 	default:
 		return nil, fmt.Errorf("resolveExpr: unrecognized factor at position %d", m.pos-1)
 	}
 }
 
-func resolveFuncCall(fc *parser.FuncCall) (*Expr, error) {
+func (m *exprMachine) resolveFuncCall(fc *parser.FuncCall) (*Expr, error) {
 	name := FuncName(fc.Name)
 
 	switch name {
@@ -273,7 +288,7 @@ func resolveFuncCall(fc *parser.FuncCall) (*Expr, error) {
 
 	args := make([]Expr, len(fc.Args))
 	for i, argExpr := range fc.Args {
-		sub := &exprMachine{factors: argExpr.Factors}
+		sub := &exprMachine{factors: argExpr.Factors, argIdx: m.argIdx}
 		resolved, err := sub.parseExpr(0)
 		if err != nil {
 			return nil, fmt.Errorf("resolveExpr: arg %d of %s: %w", i, fc.Name, err)

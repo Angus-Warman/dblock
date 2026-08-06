@@ -158,3 +158,16 @@ func TestSelectOrderByExpression(t *testing.T) {
 		})
 	}
 }
+
+func TestSelectWhereArg(t *testing.T) {
+	db := openDB(t)
+	assertExec(t, db, "CREATE TABLE foo (label TEXT)")
+	assertExec(t, db, "INSERT INTO foo VALUES ('a')")
+	assertExec(t, db, "INSERT INTO foo VALUES ('a')")
+	assertExec(t, db, "INSERT INTO foo VALUES ('b')")
+	assertExec(t, db, "INSERT INTO foo VALUES ('b')")
+	assertExec(t, db, "INSERT INTO foo VALUES ('a')")
+	assertExec(t, db, "INSERT INTO foo VALUES ('b')")
+
+	assertQueryValueArgs(t, db, "SELECT COUNT(*) FROM foo WHERE label = ?", []any{"a"}, int64(3))
+}

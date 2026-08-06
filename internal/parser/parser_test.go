@@ -74,3 +74,13 @@ func TestParseParens(t *testing.T) {
 	require.NotNil(t, f[0].SubExpr)
 	require.NotNil(t, f[2].SubExpr)
 }
+
+func TestParseWhereArg(t *testing.T) {
+	p := mustParse(t, "SELECT COUNT(*) FROM foo WHERE label = ?")
+	require.NotNil(t, p)
+	f := p.Select.Where.Expr.Factors
+	require.Len(t, f, 3)
+	require.Equal(t, f[0].Column, "label")
+	require.Equal(t, f[1].Op, "=")
+	require.Equal(t, f[2].Arg, "?")
+}

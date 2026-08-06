@@ -26,9 +26,10 @@ type JoinScanner struct {
 	onExpr           *Expr
 	emitLeftUnmatched  bool // LEFT, FULL
 	emitRightUnmatched bool // RIGHT, FULL
+	args               []any
 }
 
-func NewJoinScanner(left, right Scanner, stmt *SelectStmt, join *JoinStmt) (*JoinScanner, error) {
+func NewJoinScanner(left, right Scanner, stmt *SelectStmt, join *JoinStmt, args []any) (*JoinScanner, error) {
 	emitLeft := false
 	emitRight := false
 	switch join.mode {
@@ -73,6 +74,7 @@ func NewJoinScanner(left, right Scanner, stmt *SelectStmt, join *JoinStmt) (*Joi
 
 		emitLeftUnmatched:  emitLeft,  // LEFT, FULL
 		emitRightUnmatched: emitRight, // RIGHT, FULL
+		args:               args,
 	}, nil
 }
 
@@ -111,7 +113,7 @@ func (j *JoinScanner) Next() (key []byte, row Row, ok bool, err error) {
 
 			combined := combineRows(j.currentLeft.row, rightEntry.row)
 
-			val, err := evalExpr(j.onExpr, j.columns, combined.Values)
+			val, err := evalExpr(j.onExpr, j.columns, combined.Values, j.args)
 
 			if err != nil {
 				return nil, Row{}, false, err
