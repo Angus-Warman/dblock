@@ -69,3 +69,21 @@ func TestSetPageSize(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(256), stat.Size())
 }
+
+func TestPageSizeAfterDelete(t *testing.T) {
+	db, fp := openFileDB(t)
+	assertExec(t, db, "PRAGMA page_size 8")
+
+	steps := 10
+
+	for range steps {
+		assertExec(t, db, "CREATE TABLE foo (a TEXT)")
+		assertExec(t, db, "INSERT INTO foo VALUES ('a')")
+		assertExec(t, db, "DROP TABLE foo")
+	}
+
+	require.NoError(t, db.Close())
+	stat, err := os.Stat(fp)
+	require.NoError(t, err)
+	require.Equal(t, int64(256), stat.Size())
+}

@@ -695,6 +695,7 @@ func (e *Engine) DropTable(name string, ifExists bool) error {
 	}
 
 	keyIdx := -1
+	rootpage := PageID(0)
 
 	for i, encodedRow := range encodedRows {
 		row, err := DecodeRow(encodedRow)
@@ -705,6 +706,7 @@ func (e *Engine) DropTable(name string, ifExists bool) error {
 
 		if row.Values[0].(string) == name {
 			keyIdx = i
+			rootpage = PageID(row.Values[3].(int64))
 			break
 		}
 	}
@@ -722,6 +724,22 @@ func (e *Engine) DropTable(name string, ifExists bool) error {
 
 	if err != nil {
 		return err
+	}
+
+	// Free every page owned by the table so its storage can be reused and the
+	// file can shrink back to just the pages still in use.
+	tree := NewBtree(e.pager, rootpage)
+
+	pages, err := tree.PageIDs()
+
+	if err != nil {
+		return err
+	}
+
+	for _, id := range pages {
+		if err := e.pager.FreePage(id); err != nil {
+			return err
+		}
 	}
 
 	return e.bumpSchemaVersion()

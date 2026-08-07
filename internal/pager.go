@@ -12,6 +12,7 @@ type Pager interface {
 	GetMetadata() (*metadata.Metadata, error)
 	PutMetadata(*metadata.Metadata) error
 	NextID() PageID
+	FreePage(PageID) error
 	Close() error
 }
 
@@ -148,6 +149,17 @@ func (p *StoragePager) NextID() PageID {
 	p.nextID++
 	p.store.ReserveBlock(storage.BlockID(id))
 	return id
+}
+
+// FreePage implements [Pager]. It returns the page's blocks to the free pool
+// so they can be reallocated and, when they are the last in the file, removed.
+func (p *StoragePager) FreePage(id PageID) error {
+	if id == RootSchemaPageID {
+		return nil
+	}
+
+	p.store.FreeBlock(storage.BlockID(id))
+	return nil
 }
 
 func (p *StoragePager) Commit() error {

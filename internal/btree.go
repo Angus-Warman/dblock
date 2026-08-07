@@ -355,6 +355,38 @@ func (t *Tree) All() ([][]byte, [][]byte, error) {
 	return keys, result, nil
 }
 
+// PageIDs returns every page reachable from the tree's root, including the
+// root itself, depth-first. It is used to free a table's storage on DROP.
+func (t *Tree) PageIDs() ([]PageID, error) {
+	visited := make(map[PageID]bool)
+	pages := []PageID{}
+
+	stack := []PageID{t.rootID}
+
+	for len(stack) > 0 {
+		id := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
+
+		if visited[id] {
+			continue
+		}
+		visited[id] = true
+		pages = append(pages, id)
+
+		page, err := t.loadPage(id)
+
+		if err != nil {
+			return nil, err
+		}
+
+		if !page.IsLeaf {
+			stack = append(stack, page.Children...)
+		}
+	}
+
+	return pages, nil
+}
+
 // Delete removes a key and its value from the tree.
 func (t *Tree) Delete(key []byte) error {
 	leaf, _, err := t.findLeaf(key)

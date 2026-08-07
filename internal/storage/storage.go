@@ -25,6 +25,8 @@ type TxStorage struct {
 	wal         *WalStorage
 	maxWalBlock WalID // at time of open
 	dirtyBlocks map[BlockID]Block
+	freedBlocks []BlockID
+	blockSize   int
 }
 
 // GetBlock returns either the committed block from main, or the WAL block that existed when TxStorage first opened
@@ -48,6 +50,15 @@ func (s *TxStorage) PutBlock(id BlockID, buf []byte) {
 }
 
 func (s *TxStorage) Commit() error {
+	// Freeing a page is only visible once the transaction that drops the
+	// table commits; a rollback must leave the blocks allocated.
+	for _, id := range s.freedBlocks {
+		delete(s.dirtyBlocks, id)
+		s.wal.freeBlock(id)
+	}
+
+	s.freedBlocks = nil
+
 	blocks := []Block{}
 
 	for _, block := range s.dirtyBlocks {
@@ -74,6 +85,7 @@ func (s *TxStorage) Commit() error {
 
 func (s *TxStorage) Rollback() error {
 	s.dirtyBlocks = make(map[BlockID]Block)
+	s.freedBlocks = nil
 	s.wal.forgetTx(s.id)
 	return nil
 }
@@ -89,9 +101,21 @@ func (s *TxStorage) NextBlockID() BlockID {
 	return s.wal.NextBlockID()
 }
 
-// ReserveBlock records that the given block ID is in use.
+// ReserveBlock records that the given block ID is in use. If the block was
+// previously freed, it is written back as an empty block so that stale data
+// left in main can never be read again before the block is reused.
 func (s *TxStorage) ReserveBlock(id BlockID) {
-	s.wal.ReserveBlock(id)
+	reused := s.wal.ReserveBlock(id)
+
+	if reused {
+		s.PutBlock(id, make([]byte, s.blockSize))
+	}
+}
+
+// FreeBlock marks the block as free once this transaction commits, so its
+// pages can be reallocated and the file can shrink.
+func (s *TxStorage) FreeBlock(id BlockID) {
+	s.freedBlocks = append(s.freedBlocks, id)
 }
 
 type WalStorage struct {
@@ -105,6 +129,7 @@ type WalStorage struct {
 	nextTxID         TxID
 	walEnd           BlockOffset
 	nextBlockID      BlockID
+	freed            map[BlockID]bool
 	committedTxCount int
 	blockSize        int
 }
@@ -176,6 +201,7 @@ func NewWalStorage(main File, wal File) (*WalStorage, error) {
 		walIndex:      make(map[BlockID]WalID),
 		walOffsets:    make(map[WalID]BlockOffset),
 		txUsingWalIDs: make(map[TxID]WalID),
+		freed:         make(map[BlockID]bool),
 		main:          main,
 		wal:           wal,
 		maxWalID:      0,
@@ -276,6 +302,7 @@ func (w *WalStorage) NewTxStorage() *TxStorage {
 		wal:         w,
 		maxWalBlock: w.maxWalID,
 		dirtyBlocks: make(map[BlockID]Block),
+		blockSize:   w.blockSize,
 	}
 	w.nextTxID++
 	w.txUsingWalIDs[tx.id] = tx.maxWalBlock
@@ -290,12 +317,35 @@ func (w *WalStorage) forgetTx(id TxID) {
 }
 
 // ReserveBlock records that the given block ID is in use so fresh allocations
-// never reuse it, even before the block is first written.
-func (w *WalStorage) ReserveBlock(id BlockID) {
+// never reuse it, even before the block is first written. It reports whether
+// the block had been freed and is therefore being reused.
+func (w *WalStorage) ReserveBlock(id BlockID) bool {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	reused := w.freed[id]
+	delete(w.freed, id)
 	if id >= w.nextBlockID {
 		w.nextBlockID = id + 1
+	}
+	return reused
+}
+
+// freeBlock drops the block's committed frames so a checkpoint skips it, and
+// if it is the last block of the file the allocation watermark retreats so the
+// next allocation reuses it (and the file can shrink).
+func (w *WalStorage) freeBlock(id BlockID) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if id <= 0 {
+		return
+	}
+
+	delete(w.walIndex, id)
+	w.freed[id] = true
+
+	if id+1 == w.nextBlockID {
+		w.nextBlockID = id
 	}
 }
 
@@ -546,6 +596,13 @@ func (p *WalStorage) Checkpoint() error {
 		return fmt.Errorf("Checkpoint: %w", err)
 	}
 
+	// 2.5. Shrink main when trailing blocks were freed, so a dropped table's
+	// pages disappear from the file instead of leaving holes behind. Only safe
+	// when no active transaction still reads the pre-free versions.
+	if err := p.truncateMain(); err != nil {
+		return fmt.Errorf("Checkpoint: %w", err)
+	}
+
 	// 3. Rewrite the WAL with only the frames that are still required, buffered
 	// first so the rewrite never clobbers a frame that hasn't been read yet.
 	type keptFrame struct {
@@ -619,6 +676,33 @@ func pagesMoveToMain(walIndex map[BlockID]WalID, gate WalID) bool {
 		}
 	}
 	return false
+}
+
+// truncateMain cuts main down to the highest block the allocation watermark
+// still covers, dropping trailing blocks that were freed and reallocated since
+// the last checkpoint. It never grows main. The caller must hold p.mu.
+func (p *WalStorage) truncateMain() error {
+	if len(p.txUsingWalIDs) > 0 {
+		return nil
+	}
+
+	size, err := p.main.Size()
+
+	if err != nil {
+		return err
+	}
+
+	newSize := int64(p.nextBlockID) * int64(p.blockSize)
+
+	if newSize >= size {
+		return nil
+	}
+
+	if err := p.main.Truncate(newSize); err != nil {
+		return err
+	}
+
+	return p.main.Sync()
 }
 
 func (p *WalStorage) getMetadataHot() (*metadata.Metadata, error) {
