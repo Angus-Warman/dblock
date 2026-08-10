@@ -1,4 +1,4 @@
-module dblock2
+module github.com/Angus-Warman/dblock
 
 go 1.25.0
 

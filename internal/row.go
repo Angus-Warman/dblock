@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"dblock2/internal/codec"
+	"github.com/Angus-Warman/dblock/internal/codec"
 
 	"github.com/google/uuid"
 )

@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"testing"
 
-	"dblock2/internal/metadata"
+	"github.com/Angus-Warman/dblock/internal/metadata"
 
 	"github.com/stretchr/testify/require"
 )

@@ -1,12 +1,13 @@
 package internal
 
 import (
-	"dblock2/internal/parser"
-	"dblock2/internal/pragma"
 	"encoding/hex"
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/Angus-Warman/dblock/internal/parser"
+	"github.com/Angus-Warman/dblock/internal/pragma"
 
 	"github.com/google/uuid"
 )

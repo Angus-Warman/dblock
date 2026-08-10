@@ -1,12 +1,13 @@
 package storage
 
 import (
-	"dblock2/internal/metadata"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"hash/crc32"
 	"sync"
+
+	"github.com/Angus-Warman/dblock/internal/metadata"
 )
 
 // The first block of a database file reserves metadata.Length bytes for

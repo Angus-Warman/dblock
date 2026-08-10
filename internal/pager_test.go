@@ -3,8 +3,8 @@ package internal
 import (
 	"testing"
 
-	"dblock2/internal/metadata"
-	"dblock2/internal/storage"
+	"github.com/Angus-Warman/dblock/internal/metadata"
+	"github.com/Angus-Warman/dblock/internal/storage"
 
 	"github.com/stretchr/testify/require"
 )

@@ -1,9 +1,10 @@
 package internal
 
 import (
-	"dblock2/internal/metadata"
-	"dblock2/internal/storage"
 	"errors"
+
+	"github.com/Angus-Warman/dblock/internal/metadata"
+	"github.com/Angus-Warman/dblock/internal/storage"
 )
 
 type Pager interface {

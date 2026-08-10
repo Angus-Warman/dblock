@@ -6,7 +6,7 @@ import (
 	"errors"
 	"fmt"
 
-	"dblock2/internal/metadata"
+	"github.com/Angus-Warman/dblock/internal/metadata"
 )
 
 var LE = binary.LittleEndian

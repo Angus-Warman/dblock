@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	_ "dblock2"
+	_ "github.com/Angus-Warman/dblock"
 )
 
 func main() {

@@ -3,7 +3,7 @@ package internal
 import (
 	"testing"
 
-	"dblock2/internal/parser"
+	"github.com/Angus-Warman/dblock/internal/parser"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"

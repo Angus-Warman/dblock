@@ -2,12 +2,15 @@ package tests
 
 import (
 	"database/sql"
-	"dblock2/internal/metadata"
 	"os"
 	"path/filepath"
 	"testing"
 
+	"github.com/Angus-Warman/dblock/internal/metadata"
+
 	"github.com/stretchr/testify/require"
+
+	_ "github.com/Angus-Warman/dblock"
 )
 
 func openDB(t *testing.T) *sql.DB {

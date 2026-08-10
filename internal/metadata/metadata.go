@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"hash/crc32"
 
-	"dblock2/internal/codec"
+	"github.com/Angus-Warman/dblock/internal/codec"
 )
 
 type Metadata struct {

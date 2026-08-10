@@ -1,8 +1,9 @@
-package dblock2
+package dblock
 
 import (
 	"database/sql"
-	"dblock2/internal"
+
+	"github.com/Angus-Warman/dblock/internal"
 )
 
 func init() {

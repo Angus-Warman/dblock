@@ -1,7 +1,6 @@
 package tests
 
 import (
-	_ "dblock2"
 	"testing"
 
 	"github.com/stretchr/testify/require"

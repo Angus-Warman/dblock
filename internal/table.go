@@ -1,6 +1,6 @@
 package internal
 
-import "dblock2/internal/codec"
+import "github.com/Angus-Warman/dblock/internal/codec"
 
 type Table struct {
 	name    string

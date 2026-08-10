@@ -1,8 +1,9 @@
 package internal
 
 import (
-	"dblock2/internal/codec"
 	"fmt"
+
+	"github.com/Angus-Warman/dblock/internal/codec"
 )
 
 type DataType uint8

@@ -1,11 +1,12 @@
 package internal
 
 import (
-	"dblock2/internal/metadata"
-	"dblock2/internal/pragma"
 	"fmt"
 	"slices"
 	"strconv"
+
+	"github.com/Angus-Warman/dblock/internal/metadata"
+	"github.com/Angus-Warman/dblock/internal/pragma"
 )
 
 type Engine struct {

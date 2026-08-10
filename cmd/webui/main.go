@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	_ "dblock2"
+	_ "github.com/Angus-Warman/dblock"
 )
 
 var db *sql.DB

@@ -1,11 +1,12 @@
 package internal
 
 import (
-	"dblock2/internal/parser"
 	"encoding/hex"
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/Angus-Warman/dblock/internal/parser"
 )
 
 type ExprKind uint8

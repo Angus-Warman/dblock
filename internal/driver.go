@@ -3,9 +3,10 @@ package internal
 import (
 	"context"
 	"database/sql/driver"
-	"dblock2/internal/parser"
 	"fmt"
 	"io"
+
+	"github.com/Angus-Warman/dblock/internal/parser"
 
 	"github.com/google/uuid"
 )

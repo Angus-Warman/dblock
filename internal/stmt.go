@@ -1,6 +1,6 @@
 package internal
 
-import "dblock2/internal/pragma"
+import "github.com/Angus-Warman/dblock/internal/pragma"
 
 type ExecStmt struct {
 	createStmt *CreateStmt
