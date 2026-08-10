@@ -31,8 +31,13 @@ type DropStmt struct {
 
 type InsertStmt struct {
 	tableName string
-	values    []any // Either a placholder ?, or parsed literal value
+	columns   []string // optional named columns; nil/empty = positional
+	values    []any    // placeholder "?", literal value, or DefaultKeyword
 }
+
+// DefaultKeyword marks a DEFAULT keyword in an INSERT value list; the value is
+// resolved from the column definition at insert time.
+type DefaultKeyword struct{}
 
 type UpdateStmt struct {
 	tableName string
@@ -47,6 +52,11 @@ type AlterStmt struct {
 	renameCol *RenameColumnOp
 	renameTbl *RenameTableOp
 	alterCol  *AlterColumnTypeOp
+	addCol    *AddColumnOp
+}
+
+type AddColumnOp struct {
+	column Column
 }
 
 type RenameColumnOp struct {

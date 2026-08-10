@@ -87,6 +87,61 @@ func mustCreateIndex(t *testing.T, query string) *CreateIdxStmt {
 	return stmt.createIdxStmt
 }
 
+func mustInsert(t *testing.T, query string) *InsertStmt {
+	t.Helper()
+	parsed := mustParse(t, query)
+	require.NotNil(t, parsed.Insert)
+	stmt, err := resolveInsert(parsed.Insert)
+	require.NoError(t, err)
+	require.NotNil(t, stmt.insertStmt)
+	return stmt.insertStmt
+}
+
+func TestResolveInsert(t *testing.T) {
+	tests := []struct {
+		name    string
+		query   string
+		columns []string
+		values  []any
+	}{
+		{
+			name:   "positional values",
+			query:  "INSERT INTO foo VALUES (1, 'bar')",
+			values: []any{int64(1), "bar"},
+		},
+		{
+			name:    "named columns",
+			query:   "INSERT INTO foo (id, name) VALUES (1, 'bar')",
+			columns: []string{"id", "name"},
+			values:  []any{int64(1), "bar"},
+		},
+		{
+			name:   "default values",
+			query:  "INSERT INTO foo DEFAULT VALUES",
+			values: []any{},
+		},
+		{
+			name:   "default keyword",
+			query:  "INSERT INTO foo VALUES (1, DEFAULT, 'bar')",
+			values: []any{int64(1), DefaultKeyword{}, "bar"},
+		},
+		{
+			name:   "placeholder",
+			query:  "INSERT INTO foo VALUES (?, DEFAULT)",
+			values: []any{"?", DefaultKeyword{}},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stmt := mustInsert(t, tt.query)
+			require.Equal(t, "foo", stmt.tableName)
+			require.Equal(t, tt.columns, stmt.columns)
+			require.Equal(t, tt.values, stmt.values)
+		})
+	}
+}
+
 func TestResolveCreateIndex(t *testing.T) {
 	tests := []struct {
 		name        string

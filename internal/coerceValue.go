@@ -8,6 +8,29 @@ import (
 	"github.com/google/uuid"
 )
 
+func zeroValue(dt DataType) any {
+	switch dt {
+	case AnyType, NullType:
+		return nil
+	case IntegerType:
+		return int64(0)
+	case RealType:
+		return float64(0)
+	case TextType:
+		return ""
+	case BoolType:
+		return false
+	case BlobType:
+		return []byte{}
+	case TimeType:
+		return time.Time{}
+	case UUIDType:
+		return uuid.UUID{}
+	default:
+		panic(fmt.Errorf("no zero value for DataType %v", dt))
+	}
+}
+
 func coerceValue(col Column, value any) (any, error) {
 	if value == nil {
 		if col.dataType == AnyType {

@@ -9,7 +9,7 @@ import (
 
 var sqlLexer = lexer.MustSimple([]lexer.SimpleRule{
 	{Name: "ws", Pattern: `\s+`},
-	{Name: "Keyword", Pattern: `CREATE|DROP|TABLE|INDEX|PRIMARY|KEY|UNIQUE|INSERT|INTO|VALUES|SELECT|FROM|WHERE|IF|NOT|EXISTS|UPDATE|SET|GROUP|ORDER|ASC|DESC|AS|LIMIT|OFFSET|JOIN|INNER|OUTER|LEFT|RIGHT|FULL|CROSS|ON|ALTER|RENAME|COLUMN|TO`},
+	{Name: "Keyword", Pattern: `CREATE|DROP|TABLE|INDEX|PRIMARY|KEY|UNIQUE|DEFAULT|INSERT|INTO|VALUES|SELECT|FROM|WHERE|IF|NOT|EXISTS|UPDATE|SET|GROUP|ORDER|ASC|DESC|AS|LIMIT|OFFSET|JOIN|INNER|OUTER|LEFT|RIGHT|FULL|CROSS|ON|ALTER|RENAME|COLUMN|TO`},
 	{Name: "TypeName", Pattern: `TEXT|INTEGER|REAL|BLOB|BOOL|TIME|UUID|ANY`},
 	{Name: "True", Pattern: `TRUE`},
 	{Name: "False", Pattern: `FALSE`},
@@ -47,6 +47,7 @@ type AlterStmt struct {
 	RenameCol *RenameColOp    `parser:"( \"RENAME\" \"COLUMN\" @@ )?"`
 	RenameTbl *RenameTblOp    `parser:"( \"RENAME\" \"TO\" @@ )?"`
 	AlterCol  *AlterColTypeOp `parser:"( \"ALTER\" \"COLUMN\" @@ )?"`
+	AddCol    *AddColumnOp    `parser:"( \"ADD\" \"COLUMN\" @@ )?"`
 }
 
 func (a *AlterStmt) HasIfExists() bool { return a.IfExists != nil }
@@ -65,6 +66,12 @@ type AlterColTypeOp struct {
 	NewType string `parser:"\"TYPE\" @TypeName"`
 }
 
+type AddColumnOp struct {
+	Name    string         `parser:"@Ident"`
+	Type    string         `parser:"@TypeName"`
+	Default *DefaultClause `parser:"(@@)?"`
+}
+
 type CreateStmt struct {
 	ExistClause *IfNotExistsClause `parser:"\"CREATE\" \"TABLE\" (@@)?"`
 	TableName   string             `parser:"@Ident"`
@@ -80,9 +87,22 @@ type CreateIdxStmt struct {
 }
 
 type InsertStmt struct {
-	TableName string   `parser:"\"INSERT\" \"INTO\" @Ident"`
-	Columns   []string `parser:"(\"(\" @Ident (\",\" @Ident)* \")\")?"`
-	Values    []Value  `parser:"\"VALUES\" \"(\" @@ (\",\" @@)* \")\""`
+	TableName string      `parser:"\"INSERT\" \"INTO\" @Ident"`
+	Columns   []string    `parser:"(\"(\" @Ident (\",\" @Ident)* \")\")?"`
+	Body      *InsertBody `parser:"@@"`
+}
+
+type InsertBody struct {
+	Default *DefaultValuesClause `parser:"  @@"`
+	Values  *InsertValuesClause  `parser:"| \"VALUES\" \"(\" @@ (\",\" @@)* \")\""`
+}
+
+type DefaultValuesClause struct {
+	Line string `parser:"\"DEFAULT\" \"VALUES\""`
+}
+
+type InsertValuesClause struct {
+	Values []Value `parser:"@@ (\",\" @@)*"`
 }
 
 type SelectStmt struct {
@@ -150,10 +170,15 @@ type IfExistsClause struct {
 }
 
 type ParsedColumn struct {
-	Name         string `parser:"@Ident"`
-	Type         string `parser:"@TypeName"`
-	IsPrimaryKey bool   `parser:"@(\"PRIMARY\" \"KEY\")?"`
-	IsUnique     bool   `parser:"@(\"UNIQUE\")?"`
+	Name         string         `parser:"@Ident"`
+	Type         string         `parser:"@TypeName"`
+	IsPrimaryKey bool           `parser:"@(\"PRIMARY\" \"KEY\")?"`
+	IsUnique     bool           `parser:"@(\"UNIQUE\")?"`
+	Default      *DefaultClause `parser:"(@@)?"`
+}
+
+type DefaultClause struct {
+	Expr Expr `parser:"\"DEFAULT\" @@"`
 }
 
 type WhereClause struct {
@@ -182,13 +207,14 @@ type OffsetClause struct {
 }
 
 type Value struct {
-	Num   string `parser:"  @Number"`
-	Bytes string `parser:"| @Hex"`
-	Str   string `parser:"| @String"`
-	Null  string `parser:"| @Null"`
-	Bool  string `parser:"| @True | @False"`
-	Uuid  string `parser:"| @Uuid"`
-	Arg   string `parser:"| @Arg"`
+	Num     string `parser:"  @Number"`
+	Bytes   string `parser:"| @Hex"`
+	Str     string `parser:"| @String"`
+	Null    string `parser:"| @Null"`
+	Bool    string `parser:"| @True | @False"`
+	Uuid    string `parser:"| @Uuid"`
+	Arg     string `parser:"| @Arg"`
+	Default string `parser:"| @\"DEFAULT\""`
 }
 
 type SelectItem struct {

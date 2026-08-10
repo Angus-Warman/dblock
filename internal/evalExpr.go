@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+
+	"github.com/Angus-Warman/dblock/internal/parser"
 )
 
 // evalExpr evaluates a resolved expression tree against a single row. columns
@@ -274,4 +276,34 @@ func exprString(expr *Expr) string {
 	}
 
 	return ""
+}
+
+// evalDefaultExpr evaluates a column's DEFAULT expression to a literal value.
+// A column with no default yields NULL.
+func evalDefaultExpr(col Column, columns []string, values []any) (any, error) {
+	if col.defaultExpr == "" {
+		return nil, nil
+	}
+
+	parsed, err := parser.ParseExpr(col.defaultExpr)
+
+	if err != nil {
+		return nil, fmt.Errorf("Insert: invalid default for column %q: %w", col.name, err)
+	}
+
+	m := NewExprMachine()
+
+	expr, err := m.resolveExpr(parsed)
+
+	if err != nil {
+		return nil, fmt.Errorf("Insert: invalid default for column %q: %w", col.name, err)
+	}
+
+	val, err := evalExpr(expr, columns, values, nil)
+
+	if err != nil {
+		return nil, fmt.Errorf("Insert: invalid default for column %q: %w", col.name, err)
+	}
+
+	return val, nil
 }

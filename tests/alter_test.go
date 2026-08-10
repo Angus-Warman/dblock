@@ -48,3 +48,18 @@ func TestAlterRenameColumnMissing(t *testing.T) {
 	assertExecFails(t, db, "ALTER TABLE foo RENAME COLUMN nope TO w", "no such column")
 }
 
+func TestAlterTableAddColumn(t *testing.T) {
+	db := openDB(t)
+	assertExec(t, db, "CREATE TABLE foo (x INTEGER)")
+	assertExec(t, db, "INSERT INTO foo VALUES (1)")
+	assertExec(t, db, "ALTER TABLE foo ADD COLUMN y TEXT")
+	assertQueryRow(t, db, "SELECT * FROM foo", []any{int64(1), ""})
+}
+
+func TestAlterTableAddColumnWithDefault(t *testing.T) {
+	db := openDB(t)
+	assertExec(t, db, "CREATE TABLE foo (x INTEGER)")
+	assertExec(t, db, "INSERT INTO foo VALUES (1)")
+	assertExec(t, db, "ALTER TABLE foo ADD COLUMN y INTEGER DEFAULT 2")
+	assertQueryRow(t, db, "SELECT * FROM foo", []any{int64(1), int64(2)})
+}

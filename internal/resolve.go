@@ -223,7 +223,12 @@ func resolveCreate(parsed *parser.CreateStmt) (*ExecStmt, error) {
 			return nil, err
 		}
 
-		columns[i] = Column{name: c.Name, dataType: dt}
+		col := Column{name: c.Name, dataType: dt}
+
+		if c.Default != nil {
+			col.defaultExpr = parser.RenderExpr(&c.Default.Expr)
+		}
+		columns[i] = col
 	}
 	execStmt := &ExecStmt{
 		createStmt: &CreateStmt{
@@ -272,6 +277,22 @@ func resolveAlter(parsed *parser.AlterStmt) (*ExecStmt, error) {
 		}
 	}
 
+	if parsed.AddCol != nil {
+		dt, err := parseDataType(parsed.AddCol.Type)
+
+		if err != nil {
+			return nil, err
+		}
+
+		col := Column{name: parsed.AddCol.Name, dataType: dt}
+
+		if parsed.AddCol.Default != nil {
+			col.defaultExpr = parser.RenderExpr(&parsed.AddCol.Default.Expr)
+		}
+
+		alter.addCol = &AddColumnOp{column: col}
+	}
+
 	execStmt := &ExecStmt{
 		alterStmt: alter,
 	}
@@ -291,19 +312,27 @@ func resolveDrop(parsed *parser.DropStmt) (*ExecStmt, error) {
 func resolveInsert(parsed *parser.InsertStmt) (*ExecStmt, error) {
 	values := []any{}
 
-	for _, parsedValue := range parsed.Values {
-		val, err := toAny(parsedValue)
+	if parsed.Body != nil && parsed.Body.Values != nil {
+		for _, parsedValue := range parsed.Body.Values.Values {
+			if parsedValue.Default != "" {
+				values = append(values, DefaultKeyword{})
+				continue
+			}
 
-		if err != nil {
-			return nil, err
+			val, err := toAny(parsedValue)
+
+			if err != nil {
+				return nil, err
+			}
+
+			values = append(values, val)
 		}
-
-		values = append(values, val)
 	}
 
 	execStmt := &ExecStmt{
 		insertStmt: &InsertStmt{
 			tableName: parsed.TableName,
+			columns:   parsed.Columns,
 			values:    values,
 		},
 	}

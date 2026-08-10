@@ -362,21 +362,23 @@ func (e *Engine) Insert(stmt *InsertStmt, args []any) (insertedID int64, rowsAff
 		values = append(values, v)
 	}
 
-	if len(values) != len(info.table.columns) {
-		return -1, -1, fmt.Errorf("Insert: expected %d values, got %d", len(info.table.columns), len(values))
+	rowValues, err := buildRowValues(info.table.columns, stmt.columns, values)
+
+	if err != nil {
+		return -1, -1, err
 	}
 
 	for i, col := range info.table.columns {
-		coerced, err := coerceValue(col, values[i])
+		coerced, err := coerceValue(col, rowValues[i])
 
 		if err != nil {
 			return -1, -1, fmt.Errorf("Insert: %w", err)
 		}
 
-		values[i] = coerced
+		rowValues[i] = coerced
 	}
 
-	row := Row{Values: values}
+	row := Row{Values: rowValues}
 	encodedRow := row.Encode()
 	tree := NewBtree(e.pager, info.rootPage)
 	rowID, err := tree.InsertNext(encodedRow)
@@ -404,6 +406,82 @@ func (e *Engine) Insert(stmt *InsertStmt, args []any) (insertedID int64, rowsAff
 	}
 
 	return int64(rowID), rowsAffected, nil
+}
+
+// buildRowValues maps supplied insert values onto full row values. With named
+// columns each value targets that column; otherwise values are positional.
+// Missing columns and DEFAULT keywords are filled from the column definition,
+// evaluated left-to-right so a default may reference earlier columns.
+func buildRowValues(columns []Column, named []string, values []any) ([]any, error) {
+	if len(named) == 0 {
+		if len(values) > len(columns) {
+			return nil, fmt.Errorf("Insert: expected %d values, got %d", len(columns), len(values))
+		}
+	} else if len(values) > len(named) {
+		return nil, fmt.Errorf("Insert: expected %d values, got %d", len(named), len(values))
+	}
+
+	colNames := make([]string, len(columns))
+
+	for i, col := range columns {
+		colNames[i] = col.name
+	}
+
+	pending := make(map[int]any, len(values))
+
+	if len(named) == 0 {
+		for i, v := range values {
+			pending[i] = v
+		}
+	} else {
+		colIdx := make(map[string]int, len(columns))
+
+		for i, col := range columns {
+			colIdx[col.name] = i
+		}
+
+		for i, v := range values {
+			idx, ok := colIdx[named[i]]
+
+			if !ok {
+				return nil, fmt.Errorf("Insert: no such column %q", named[i])
+			}
+
+			pending[idx] = v
+		}
+	}
+
+	row := make([]any, len(columns))
+
+	for i := range columns {
+		v, supplied := pending[i]
+
+		if supplied {
+			if _, isDefault := v.(DefaultKeyword); isDefault {
+				dv, err := evalDefaultExpr(columns[i], colNames, row)
+
+				if err != nil {
+					return nil, err
+				}
+
+				row[i] = dv
+				continue
+			}
+
+			row[i] = v
+			continue
+		}
+
+		dv, err := evalDefaultExpr(columns[i], colNames, row)
+
+		if err != nil {
+			return nil, err
+		}
+
+		row[i] = dv
+	}
+
+	return row, nil
 }
 
 func (e *Engine) findIndexes(tableName string) ([]*Index, error) {
@@ -590,6 +668,11 @@ func (e *Engine) AlterTable(stmt *AlterStmt) error {
 
 		e.renameTable(table, stmt.renameTbl)
 
+	case stmt.addCol != nil:
+		if err := e.addColumn(table, stmt.addCol, info.rootPage); err != nil {
+			return err
+		}
+
 	default:
 		return fmt.Errorf("AlterTable: unsupported ALTER TABLE operation")
 	}
@@ -623,6 +706,57 @@ func (e *Engine) alterColumnType(table *Table, op *AlterColumnTypeOp) error {
 	}
 
 	table.columns[colIdx].dataType = dt
+
+	return nil
+}
+
+// addColumn appends a column to a table definition and fills existing rows
+// with the column's default (or the type's zero value when it has none).
+func (e *Engine) addColumn(table *Table, op *AddColumnOp, rootPage PageID) error {
+	for _, col := range table.columns {
+		if col.name == op.column.name {
+			return fmt.Errorf("ALTER TABLE: column %q already exists", op.column.name)
+		}
+	}
+
+	table.columns = append(table.columns, op.column)
+
+	value, err := evalDefaultExpr(op.column, table.ColumnNames(), nil)
+
+	if err != nil {
+		return err
+	}
+
+	if value == nil {
+		value = zeroValue(op.column.dataType)
+	}
+
+	coerced, err := coerceValue(op.column, value)
+
+	if err != nil {
+		return fmt.Errorf("ALTER TABLE: %w", err)
+	}
+
+	tree := NewBtree(e.pager, rootPage)
+	keys, encodedRows, err := tree.All()
+
+	if err != nil {
+		return err
+	}
+
+	for i, encodedRow := range encodedRows {
+		row, err := DecodeRow(encodedRow)
+
+		if err != nil {
+			return err
+		}
+
+		row.Values = append(row.Values, coerced)
+
+		if err := tree.Insert(keys[i], row.Encode()); err != nil {
+			return err
+		}
+	}
 
 	return nil
 }

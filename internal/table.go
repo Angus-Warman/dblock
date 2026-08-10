@@ -8,8 +8,9 @@ type Table struct {
 }
 
 type Column struct {
-	name     string
-	dataType DataType
+	name        string
+	dataType    DataType
+	defaultExpr string
 }
 
 func (t *Table) Encode() []byte {
@@ -22,6 +23,7 @@ func (t *Table) Encode() []byte {
 	for _, col := range t.columns {
 		e.PutShortStringWithLength(col.name)
 		PutDataType(e, col.dataType)
+		e.PutShortStringWithLength(col.defaultExpr)
 	}
 
 	return e.Bytes()
@@ -60,7 +62,18 @@ func DecodeTable(buf []byte) (*Table, error) {
 			return nil, err
 		}
 
-		td.columns = append(td.columns, Column{name: colName, dataType: dt})
+		defaultExpr, err := d.GetShortStringWithLength()
+
+		if err != nil {
+			return nil, err
+		}
+
+		td.columns = append(td.columns,
+			Column{
+				name:        colName,
+				dataType:    dt,
+				defaultExpr: defaultExpr,
+			})
 	}
 
 	return td, nil

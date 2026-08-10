@@ -93,3 +93,8 @@ func TestParseCreateIndex(t *testing.T) {
 	require.Equal(t, i.TableName, "foo")
 	require.Equal(t, i.Columns, []string{"id", "created"})
 }
+
+func TestParseDefaultColumnValue(t *testing.T) {
+	p := mustParse(t, "CREATE TABLE foo (id TEXT, status INTEGER DEFAULT 1)")
+	require.NotNil(t, p.Create.Columns[1].Default)
+}
