@@ -64,7 +64,7 @@ func EncodeValue(e *codec.Encoder, val any) {
 func DecodeRow(buf []byte) (Row, error) {
 	var zero Row
 
-	d := codec.NewDecoder(buf)
+	d := codec.NewDecoder("row", buf)
 
 	count, err := d.GetUint16()
 	if err != nil {
@@ -154,4 +154,54 @@ func DecodeRow(buf []byte) (Row, error) {
 	}
 
 	return Row{Values: values}, nil
+}
+
+func (r *Row) GetValue(colMap map[string]int, colName string) (any, error) {
+	i, ok := colMap[colName]
+
+	if !ok {
+		return nil, fmt.Errorf("column %q not found", colName)
+	}
+
+	if i < 0 || i >= len(r.Values) {
+		return nil, fmt.Errorf("col ordinal %v out of bounds", i)
+	}
+
+	return r.Values[i], nil
+}
+
+func GetRowValueAs[T any](r *Row, colIdx int) (T, error) {
+	var zero T
+
+	if colIdx < 0 || colIdx >= len(r.Values) {
+		return zero, fmt.Errorf("col ordinal %v out of bounds", colIdx)
+	}
+
+	raw := r.Values[colIdx]
+
+	value, ok := raw.(T)
+
+	if !ok {
+		return zero, fmt.Errorf("value %v is not type %T", raw, zero)
+	}
+
+	return value, nil
+}
+
+func (r *Row) Clone() Row {
+	cloned := Row{
+		Values: make([]any, len(r.Values)),
+	}
+
+	for i, v := range r.Values {
+		if b1, ok := v.([]byte); ok {
+			b2 := make([]byte, len(b1))
+			copy(b2, b1)
+			cloned.Values[i] = b2
+		} else {
+			cloned.Values[i] = v
+		}
+	}
+
+	return cloned
 }

@@ -234,6 +234,18 @@ func resolveCreate(parsed *parser.CreateStmt) (*ExecStmt, error) {
 	return execStmt, nil
 }
 
+func resolveCreateIdx(parsed *parser.CreateIdxStmt) (*ExecStmt, error) {
+	execStmt := &ExecStmt{
+		createIdxStmt: &CreateIdxStmt{
+			idxName:     parsed.IndexName,
+			unique:      parsed.IsUnique,
+			tableName:   parsed.TableName,
+			columnNames: parsed.Columns,
+		},
+	}
+	return execStmt, nil
+}
+
 func resolveAlter(parsed *parser.AlterStmt) (*ExecStmt, error) {
 	alter := &AlterStmt{
 		ifExists:  parsed.HasIfExists(),

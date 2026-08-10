@@ -182,6 +182,16 @@ func (c *Conn) NewStmt(query string) (*Stmt, error) {
 		stmt.execStmt = create
 	}
 
+	if parsed.CreateIdx != nil {
+		createIdx, err := resolveCreateIdx(parsed.CreateIdx)
+
+		if err != nil {
+			return nil, err
+		}
+
+		stmt.execStmt = createIdx
+	}
+
 	if parsed.Insert != nil {
 		insert, err := resolveInsert(parsed.Insert)
 
@@ -259,7 +269,7 @@ func (s *Stmt) Exec(args []driver.Value) (driver.Result, error) {
 		_, err := s.conn.Begin()
 
 		if err != nil {
-			return nil, fmt.Errorf("Exec: %w", err)
+			return nil, fmt.Errorf("start implicit transaction: %w", err)
 		}
 	}
 
@@ -274,14 +284,14 @@ func (s *Stmt) Exec(args []driver.Value) (driver.Result, error) {
 	lastInsertID, rowsAffected, err := e.Exec(s.execStmt, engineArgs)
 
 	if err != nil {
-		return nil, fmt.Errorf("Exec: %w", err)
+		return nil, err
 	}
 
 	if implicitTx {
 		err = s.conn.activeTx.Commit()
 
 		if err != nil {
-			return nil, fmt.Errorf("Exec: %w", err)
+			return nil, fmt.Errorf("commit implicit transaction: %w", err)
 		}
 	}
 
@@ -297,7 +307,7 @@ func (s *Stmt) Query(args []driver.Value) (driver.Rows, error) {
 		_, err := s.conn.Begin()
 
 		if err != nil {
-			return nil, fmt.Errorf("Exec: %w", err)
+			return nil, fmt.Errorf("start implicit transaction: %w", err)
 		}
 	}
 
@@ -316,10 +326,10 @@ func (s *Stmt) Query(args []driver.Value) (driver.Rows, error) {
 	}
 
 	if implicitTx {
-		err = s.conn.activeTx.Commit()
+		err = s.conn.activeTx.Rollback() // Has no effect
 
 		if err != nil {
-			return nil, fmt.Errorf("Exec: %w", err)
+			return nil, fmt.Errorf("rollback implicit transaction: %w", err)
 		}
 	}
 

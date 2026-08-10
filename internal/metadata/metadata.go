@@ -76,7 +76,7 @@ func (m *Metadata) Encode() []byte {
 }
 
 func Decode(buf []byte) (*Metadata, error) {
-	dec := codec.NewDecoder(buf)
+	dec := codec.NewDecoder("metadata", buf)
 
 	magic, err := dec.GetBytes(len(headerMagic))
 

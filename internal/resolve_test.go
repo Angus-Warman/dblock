@@ -77,6 +77,77 @@ func mustSelect(t *testing.T, query string) *SelectStmt {
 	return stmt.selectStmt
 }
 
+func mustCreateIndex(t *testing.T, query string) *CreateIdxStmt {
+	t.Helper()
+	parsed := mustParse(t, query)
+	require.NotNil(t, parsed.CreateIdx)
+	stmt, err := resolveCreateIdx(parsed.CreateIdx)
+	require.NoError(t, err)
+	require.NotNil(t, stmt.createIdxStmt)
+	return stmt.createIdxStmt
+}
+
+func TestResolveCreateIndex(t *testing.T) {
+	tests := []struct {
+		name        string
+		query       string
+		idxName     string
+		tableName   string
+		columnNames []string
+		unique      bool
+	}{
+		{
+			name:        "single column",
+			query:       "CREATE INDEX bar ON foo (id)",
+			idxName:     "bar",
+			tableName:   "foo",
+			columnNames: []string{"id"},
+		},
+		{
+			name:        "multiple columns",
+			query:       "CREATE INDEX bar ON foo (id, created)",
+			idxName:     "bar",
+			tableName:   "foo",
+			columnNames: []string{"id", "created"},
+		},
+		{
+			name:        "if not exists",
+			query:       "CREATE INDEX IF NOT EXISTS bar ON foo (id, created)",
+			idxName:     "bar",
+			tableName:   "foo",
+			columnNames: []string{"id", "created"},
+		},
+		{
+			name:        "unique",
+			query:       "CREATE UNIQUE INDEX IF NOT EXISTS bar ON foo (id)",
+			idxName:     "bar",
+			tableName:   "foo",
+			columnNames: []string{"id"},
+			unique:      true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			idx := mustCreateIndex(t, tt.query)
+			require.Equal(t, tt.idxName, idx.idxName)
+			require.Equal(t, tt.tableName, idx.tableName)
+			require.Equal(t, tt.columnNames, idx.columnNames)
+			require.Equal(t, tt.unique, idx.unique)
+		})
+	}
+}
+
+func TestResolveCreateIndexIfNotExists(t *testing.T) {
+	parsed := mustParse(t, "CREATE INDEX IF NOT EXISTS bar ON foo (id)")
+	require.NotNil(t, parsed.CreateIdx)
+	require.NotNil(t, parsed.CreateIdx.ExistClause)
+
+	parsed = mustParse(t, "CREATE INDEX bar ON foo (id)")
+	require.NotNil(t, parsed.CreateIdx)
+	require.Nil(t, parsed.CreateIdx.ExistClause)
+}
+
 func TestResolveTableNameAlias(t *testing.T) {
 	s := mustSelect(t, "SELECT * FROM foo f")
 	require.Equal(t, s.tableName, "foo")

@@ -84,3 +84,12 @@ func TestParseWhereArg(t *testing.T) {
 	require.Equal(t, f[1].Op, "=")
 	require.Equal(t, f[2].Arg, "?")
 }
+
+func TestParseCreateIndex(t *testing.T) {
+	p := mustParse(t, "CREATE INDEX IF NOT EXISTS bar ON foo (id, created)")
+	require.NotNil(t, p)
+	i := p.CreateIdx
+	require.Equal(t, i.IndexName, "bar")
+	require.Equal(t, i.TableName, "foo")
+	require.Equal(t, i.Columns, []string{"id", "created"})
+}

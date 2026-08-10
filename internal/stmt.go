@@ -3,17 +3,25 @@ package internal
 import "github.com/Angus-Warman/dblock/internal/pragma"
 
 type ExecStmt struct {
-	createStmt *CreateStmt
-	insertStmt *InsertStmt
-	dropStmt   *DropStmt
-	pragmaStmt *PragmaStmt
-	updateStmt *UpdateStmt
-	alterStmt  *AlterStmt
+	createStmt    *CreateStmt
+	insertStmt    *InsertStmt
+	dropStmt      *DropStmt
+	pragmaStmt    *PragmaStmt
+	updateStmt    *UpdateStmt
+	alterStmt     *AlterStmt
+	createIdxStmt *CreateIdxStmt
 }
 
 type CreateStmt struct {
 	tableName string
 	columns   []Column
+}
+
+type CreateIdxStmt struct {
+	idxName     string
+	unique      bool
+	tableName   string
+	columnNames []string
 }
 
 type DropStmt struct {

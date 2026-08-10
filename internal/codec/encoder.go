@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+	"time"
 )
 
 var LE = binary.LittleEndian
@@ -111,6 +112,13 @@ func (e *Encoder) PutShortStringWithLength(s string) {
 
 	e.PutAsUint8(len(s))
 	e.PutBytes([]byte(s))
+}
+
+func (e *Encoder) PutTime(t time.Time) {
+	_, offset := t.Zone()
+	e.PutInt64(t.Unix())
+	e.PutAsUint32(t.Nanosecond())
+	e.PutInt16(int16(offset / 60))
 }
 
 func (e *Encoder) Len() int {

@@ -82,38 +82,17 @@ func (e *Engine) Exec(stmt *ExecStmt, args []any) (insertedID int64, rowsAffecte
 		return 0, 0, nil
 	}
 
-	return -1, -1, fmt.Errorf("unsupported statement")
-}
-
-type RootSchema struct {
-	tableNames []string
-}
-
-func (e *Engine) GetRootSchema() (*RootSchema, error) {
-	rootTree := NewBtree(e.pager, RootSchemaPageID)
-
-	_, encodedRows, err := rootTree.All()
-
-	if err != nil {
-		return nil, err
-	}
-
-	tableNames := []string{}
-
-	for _, encodedRow := range encodedRows {
-		row, err := DecodeRow(encodedRow)
+	if stmt.createIdxStmt != nil {
+		err := e.createIndex(stmt.createIdxStmt)
 
 		if err != nil {
-			return nil, fmt.Errorf("GetRootSchema: %w", err)
+			return 0, 0, err
 		}
 
-		tableName := row.Values[0].(string) // TODO
-		tableNames = append(tableNames, tableName)
+		return 0, 0, nil
 	}
 
-	return &RootSchema{
-		tableNames: tableNames,
-	}, nil
+	return -1, -1, fmt.Errorf("unsupported statement")
 }
 
 func (e *Engine) Query(stmt *QueryStmt, args []any) (Scanner, error) {
@@ -311,20 +290,6 @@ func (e *Engine) SelectAllFromTable(tableName string) (Scanner, error) {
 	return NewFullScanner(tree, info.columns)
 }
 
-const (
-	schemaNameColumn = "name"
-	objectTypeColumn = "object_type"
-	definitionColumn = "definition"
-	rootpageColumn   = "rootPage"
-)
-
-var schemaColumns = []string{
-	schemaNameColumn,
-	objectTypeColumn,
-	definitionColumn,
-	rootpageColumn,
-}
-
 type tableInfo struct {
 	rootPage PageID
 	columns  []string
@@ -420,7 +385,65 @@ func (e *Engine) Insert(stmt *InsertStmt, args []any) (insertedID int64, rowsAff
 		return -1, -1, err
 	}
 
-	return int64(rowID), 1, nil
+	rowsAffected = 1
+
+	idxs, err := e.findIndexes(stmt.tableName)
+
+	if err != nil {
+		return 0, 0, err
+	}
+
+	for _, idx := range idxs {
+		err := idx.Insert(rowID, row)
+
+		if err != nil {
+			return 0, 0, err
+		}
+
+		rowsAffected += 1
+	}
+
+	return int64(rowID), rowsAffected, nil
+}
+
+func (e *Engine) findIndexes(tableName string) ([]*Index, error) {
+	objs, err := e.GetSchemaObjects(IndexObject)
+
+	if err != nil {
+		return nil, err
+	}
+
+	out := []*Index{}
+
+	for _, obj := range objs {
+		def, err := DecodeIndexDefinition(obj.definition)
+
+		if err != nil {
+			return nil, err
+		}
+
+		if def.TableName != tableName {
+			continue
+		}
+
+		table, err := e.lookupTable(def.TableName)
+
+		if err != nil {
+			return nil, err
+		}
+
+		tree := NewBtree(e.pager, obj.rootpage)
+
+		idx, err := IndexFromDefinition(*def, table.table, tree)
+
+		if err != nil {
+			return nil, err
+		}
+
+		out = append(out, idx)
+	}
+
+	return out, nil
 }
 
 // Update applies an expression to the target column of every row matching
@@ -449,6 +472,20 @@ func (e *Engine) Update(stmt *UpdateStmt, args []any) (int64, error) {
 		return -1, fmt.Errorf("Update: no such column %q", stmt.column)
 	}
 
+	idxs, err := e.findIndexes(stmt.tableName)
+
+	if err != nil {
+		return -1, err
+	}
+
+	affectedIdxs := []*Index{}
+
+	for _, idx := range idxs {
+		if idx.containsColumn(stmt.column) {
+			affectedIdxs = append(affectedIdxs, idx)
+		}
+	}
+
 	tree := NewBtree(e.pager, info.rootPage)
 	keys, encodedRows, err := tree.All()
 
@@ -459,14 +496,14 @@ func (e *Engine) Update(stmt *UpdateStmt, args []any) (int64, error) {
 	var rowsAffected int64
 
 	for i, encodedRow := range encodedRows {
-		row, err := DecodeRow(encodedRow)
+		originalRow, err := DecodeRow(encodedRow)
 
 		if err != nil {
 			return -1, err
 		}
 
 		if stmt.where != nil {
-			val, err := evalExpr(stmt.where, info.columns, row.Values, args)
+			val, err := evalExpr(stmt.where, info.columns, originalRow.Values, args)
 
 			if err != nil {
 				return -1, err
@@ -483,7 +520,9 @@ func (e *Engine) Update(stmt *UpdateStmt, args []any) (int64, error) {
 			}
 		}
 
-		val, err := evalExpr(stmt.expr, info.columns, row.Values, args)
+		updatedRow := originalRow.Clone()
+
+		val, err := evalExpr(stmt.expr, info.columns, originalRow.Values, args)
 
 		if err != nil {
 			return -1, err
@@ -495,10 +534,18 @@ func (e *Engine) Update(stmt *UpdateStmt, args []any) (int64, error) {
 			return -1, fmt.Errorf("Update: %w", err)
 		}
 
-		row.Values[colIdx] = coerced
+		updatedRow.Values[colIdx] = coerced
 
-		if err := tree.Insert(keys[i], row.Encode()); err != nil {
+		if err := tree.Insert(keys[i], updatedRow.Encode()); err != nil {
 			return -1, err
+		}
+
+		for _, idx := range affectedIdxs {
+			err = idx.UpdateIndexEntry(originalRow, updatedRow)
+
+			if err != nil {
+				return -1, err
+			}
 		}
 
 		rowsAffected++
@@ -614,43 +661,6 @@ func (e *Engine) checkRenameTable(oldName, newName string) error {
 	return nil
 }
 
-// updateSchemaTable replaces the schema entry for schemaName with the
-// current table definition, preserving its row ID in dblock_schema.
-func (e *Engine) updateSchemaTable(schemaName string, table *Table, rootPage PageID) error {
-	rootTree := NewBtree(e.pager, RootSchemaPageID)
-
-	keys, encodedRows, err := rootTree.All()
-
-	if err != nil {
-		return err
-	}
-
-	for i, encodedRow := range encodedRows {
-		row, err := DecodeRow(encodedRow)
-
-		if err != nil {
-			return err
-		}
-
-		if row.Values[0].(string) != schemaName {
-			continue
-		}
-
-		row.Values[0] = table.name
-		row.Values[1] = string(TableObject)
-		row.Values[2] = table.Encode()
-		row.Values[3] = int64(rootPage)
-
-		if err := rootTree.Insert(keys[i], row.Encode()); err != nil {
-			return err
-		}
-
-		return e.bumpSchemaVersion()
-	}
-
-	return fmt.Errorf("table '%v' does not exist", schemaName)
-}
-
 func (e *Engine) ExecCreate(stmt *CreateStmt) error {
 	def := &Table{
 		name:    stmt.tableName,
@@ -659,12 +669,6 @@ func (e *Engine) ExecCreate(stmt *CreateStmt) error {
 
 	return e.CreateTable(def)
 }
-
-type SchemaObjectType string
-
-const (
-	TableObject SchemaObjectType = "TABLE"
-)
 
 func (e *Engine) CreateTable(def *Table) error {
 	if def == nil {
@@ -683,7 +687,14 @@ func (e *Engine) CreateTable(def *Table) error {
 
 	rootpage := e.pager.NextID()
 
-	return e.SaveSchemaObject(def.name, TableObject, def.Encode(), rootpage)
+	obj := &SchemaObject{
+		name:       def.name,
+		objectType: TableObject,
+		definition: def.Encode(),
+		rootpage:   rootpage,
+	}
+
+	return e.SaveSchemaObject(obj)
 }
 
 func (e *Engine) DropTable(name string, ifExists bool) error {
@@ -728,23 +739,6 @@ func (e *Engine) DropTable(name string, ifExists bool) error {
 	return e.bumpSchemaVersion()
 }
 
-func (e *Engine) SaveSchemaObject(objectName string, objectType SchemaObjectType, definition []byte, rootpage PageID) error {
-	values := []any{
-		objectName, string(objectType), definition, int64(rootpage),
-	}
-
-	row := Row{Values: values}
-	encodedRow := row.Encode()
-	rootTree := NewBtree(e.pager, RootSchemaPageID)
-	_, err := rootTree.InsertNext(encodedRow)
-
-	if err != nil {
-		return err
-	}
-
-	return e.bumpSchemaVersion()
-}
-
 // bumpSchemaVersion records that dblock_schema changed.
 func (e *Engine) bumpSchemaVersion() error {
 	m, err := e.pager.GetMetadata()
@@ -756,4 +750,80 @@ func (e *Engine) bumpSchemaVersion() error {
 	m.SchemaVersion++
 
 	return e.pager.PutMetadata(m)
+}
+
+func (e *Engine) createIndex(stmt *CreateIdxStmt) error {
+	table, err := e.lookupTable(stmt.tableName)
+
+	if err != nil {
+		return err
+	}
+
+	colLookup := make(map[string]bool)
+
+	for _, col := range table.columns {
+		colLookup[col] = true
+	}
+
+	for _, col := range stmt.columnNames {
+		exists := colLookup[col]
+
+		if !exists {
+			return fmt.Errorf("column %v does not exist on table %v", col, stmt.tableName)
+		}
+	}
+
+	idxDef := &IndexDefinition{
+		TableName: stmt.tableName,
+		Unique:    stmt.unique,
+		Columns:   stmt.columnNames,
+	}
+
+	rootpage := e.pager.NextID()
+
+	obj := &SchemaObject{
+		name:       stmt.idxName,
+		objectType: IndexObject,
+		definition: idxDef.Encode(),
+		rootpage:   rootpage,
+	}
+
+	err = e.SaveSchemaObject(obj)
+
+	if err != nil {
+		return err
+	}
+
+	idxTree := NewBtree(e.pager, obj.rootpage)
+
+	idx, err := IndexFromDefinition(*idxDef, table.table, idxTree)
+
+	if err != nil {
+		return err
+	}
+
+	scanner, err := e.SelectAllFromTable(table.table.name)
+
+	if err != nil {
+		return err
+	}
+
+	// Insert all rows into new index
+	for {
+		k, r, ok, err := scanner.Next()
+		if !ok {
+			break
+		}
+		if err != nil {
+			return err
+		}
+
+		id := DecodeKey(k)
+
+		if err = idx.Insert(id, r); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

@@ -28,7 +28,7 @@ func (t *Table) Encode() []byte {
 }
 
 func DecodeTable(buf []byte) (*Table, error) {
-	d := codec.NewDecoder(buf)
+	d := codec.NewDecoder("table", buf)
 
 	name, err := d.GetShortStringWithLength()
 

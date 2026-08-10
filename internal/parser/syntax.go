@@ -9,7 +9,7 @@ import (
 
 var sqlLexer = lexer.MustSimple([]lexer.SimpleRule{
 	{Name: "ws", Pattern: `\s+`},
-	{Name: "Keyword", Pattern: `CREATE|DROP|TABLE|PRIMARY|KEY|UNIQUE|INSERT|INTO|VALUES|SELECT|FROM|WHERE|IF|NOT|EXISTS|UPDATE|SET|GROUP|ORDER|ASC|DESC|AS|LIMIT|OFFSET|JOIN|INNER|OUTER|LEFT|RIGHT|FULL|CROSS|ON|ALTER|RENAME|COLUMN|TO`},
+	{Name: "Keyword", Pattern: `CREATE|DROP|TABLE|INDEX|PRIMARY|KEY|UNIQUE|INSERT|INTO|VALUES|SELECT|FROM|WHERE|IF|NOT|EXISTS|UPDATE|SET|GROUP|ORDER|ASC|DESC|AS|LIMIT|OFFSET|JOIN|INNER|OUTER|LEFT|RIGHT|FULL|CROSS|ON|ALTER|RENAME|COLUMN|TO`},
 	{Name: "TypeName", Pattern: `TEXT|INTEGER|REAL|BLOB|BOOL|TIME|UUID|ANY`},
 	{Name: "True", Pattern: `TRUE`},
 	{Name: "False", Pattern: `FALSE`},
@@ -31,13 +31,14 @@ var sqlParser = participle.MustBuild[ParsedStmt](
 )
 
 type ParsedStmt struct {
-	Alter  *AlterStmt  `parser:"  @@  \";\"?"`
-	Create *CreateStmt `parser:"| @@  \";\"?"`
-	Insert *InsertStmt `parser:"| @@  \";\"?"`
-	Select *SelectStmt `parser:"| @@  \";\"?"`
-	Update *UpdateStmt `parser:"| @@  \";\"?"`
-	Pragma *PragmaStmt `parser:"| @@  \";\"?"`
-	Drop   *DropStmt   `parser:"| @@  \";\"?"`
+	Alter     *AlterStmt     `parser:"  @@  \";\"?"`
+	Create    *CreateStmt    `parser:"| @@  \";\"?"`
+	Insert    *InsertStmt    `parser:"| @@  \";\"?"`
+	Select    *SelectStmt    `parser:"| @@  \";\"?"`
+	Update    *UpdateStmt    `parser:"| @@  \";\"?"`
+	Pragma    *PragmaStmt    `parser:"| @@  \";\"?"`
+	Drop      *DropStmt      `parser:"| @@  \";\"?"`
+	CreateIdx *CreateIdxStmt `parser:"| @@  \";\"?"`
 }
 
 type AlterStmt struct {
@@ -68,6 +69,14 @@ type CreateStmt struct {
 	ExistClause *IfNotExistsClause `parser:"\"CREATE\" \"TABLE\" (@@)?"`
 	TableName   string             `parser:"@Ident"`
 	Columns     []ParsedColumn     `parser:"\"(\" @@ (\",\" @@)* \")\""`
+}
+
+type CreateIdxStmt struct {
+	IsUnique    bool               `parser:"\"CREATE\" @(\"UNIQUE\")?"`
+	ExistClause *IfNotExistsClause `parser:"\"INDEX\" (@@)?"`
+	IndexName   string             `parser:"@Ident"`
+	TableName   string             `parser:"\"ON\" @Ident"`
+	Columns     []string           `parser:"\"(\" @Ident (\",\" @Ident)* \")\""`
 }
 
 type InsertStmt struct {
