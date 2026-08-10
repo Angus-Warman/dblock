@@ -32,7 +32,8 @@ func TestSelectUnknownColumn(t *testing.T) {
 	db := openDB(t)
 	assertExec(t, db, "CREATE TABLE foo (a TEXT)")
 	assertExec(t, db, "INSERT INTO foo VALUES ('1')")
-	assertQueryFails(t, db, "SELECT nope FROM foo", `no such column "nope"`)
+	err := assertQueryFails(t, db, "SELECT nope FROM foo")
+	assertErrContains(t, err, `column 'nope' does not exist`)
 }
 
 func TestSelectAliasedColumns(t *testing.T) {

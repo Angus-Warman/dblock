@@ -96,6 +96,10 @@ func (e *Engine) Exec(stmt *ExecStmt, args []any) (insertedID int64, rowsAffecte
 }
 
 func (e *Engine) Query(stmt *QueryStmt, args []any) (Scanner, error) {
+	if stmt == nil {
+		return nil, fmt.Errorf("nothing to query in stmt")
+	}
+
 	if stmt.selectStmt != nil {
 		return e.querySelect(stmt.selectStmt, args)
 	}
@@ -789,7 +793,7 @@ func (e *Engine) checkRenameTable(oldName, newName string) error {
 	}
 
 	if slices.Contains(rs.tableNames, newName) {
-		return fmt.Errorf("%q already exists", newName)
+		return fmt.Errorf("table '%v' already exists", newName)
 	}
 
 	return nil

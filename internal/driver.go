@@ -20,14 +20,20 @@ func NewDriver() driver.Driver {
 
 // Open implements [driver.Open].
 func (d *Driver) Open(name string) (driver.Conn, error) {
-	return NewConn(name)
+	c, err := NewConn(name)
+
+	if err != nil {
+		return nil, withPrefix(err)
+	}
+
+	return c, nil
 }
 
 func (d *Driver) OpenConnector(dsn string) (driver.Connector, error) {
 	source, err := NewPagerSource(dsn)
 
 	if err != nil {
-		return nil, err
+		return nil, withPrefix(err)
 	}
 
 	return &Connector{
@@ -60,7 +66,7 @@ func NewConn(dsn string) (*Conn, error) {
 	source, err := NewPagerSource(dsn)
 
 	if err != nil {
-		return nil, fmt.Errorf("NewConn: %w", err)
+		return nil, fmt.Errorf("create : %w", err)
 	}
 
 	return &Conn{
@@ -70,13 +76,13 @@ func NewConn(dsn string) (*Conn, error) {
 
 func (c *Conn) Begin() (driver.Tx, error) {
 	if c.activeTx != nil {
-		return nil, fmt.Errorf("a transaction already exists")
+		return nil, fmt.Errorf("dblock: transaction already exists")
 	}
 
 	tx, err := c.NewTx()
 
 	if err != nil {
-		return nil, fmt.Errorf("Begin: %w", err)
+		return nil, withPrefix(err)
 	}
 
 	c.activeTx = tx
@@ -104,7 +110,13 @@ func (c *Conn) Prepare(query string) (driver.Stmt, error) {
 }
 
 func (c *Conn) Close() error {
-	return c.source.Close()
+	err := c.source.Close()
+
+	if err != nil {
+		return withPrefix(err)
+	}
+
+	return nil
 }
 
 func (c *Conn) Ping(ctx context.Context) error {
@@ -133,7 +145,7 @@ func (t *Tx) Commit() error {
 	err := t.pager.Commit()
 
 	if err != nil {
-		return fmt.Errorf("commit: %w", err)
+		return withPrefix(fmt.Errorf("commit: %w", err))
 	}
 
 	t.conn.activeTx = nil
@@ -144,7 +156,7 @@ func (t *Tx) Rollback() error {
 	err := t.pager.Rollback()
 
 	if err != nil {
-		return fmt.Errorf("rollback: %w", err)
+		return withPrefix(err)
 	}
 
 	t.conn.activeTx = nil
@@ -275,14 +287,14 @@ func (s *Stmt) Exec(args []driver.Value) (driver.Result, error) {
 		_, err := s.conn.Begin()
 
 		if err != nil {
-			return nil, fmt.Errorf("start implicit transaction: %w", err)
+			return nil, withPrefix(fmt.Errorf("start implicit transaction: %w", err))
 		}
 	}
 
 	e, err := NewEngine(s.conn.activeTx.pager)
 
 	if err != nil {
-		return nil, err
+		return nil, withPrefix(err)
 	}
 
 	engineArgs := getEngineArgs(args)
@@ -290,14 +302,14 @@ func (s *Stmt) Exec(args []driver.Value) (driver.Result, error) {
 	lastInsertID, rowsAffected, err := e.Exec(s.execStmt, engineArgs)
 
 	if err != nil {
-		return nil, err
+		return nil, withPrefix(err)
 	}
 
 	if implicitTx {
 		err = s.conn.activeTx.Commit()
 
 		if err != nil {
-			return nil, fmt.Errorf("commit implicit transaction: %w", err)
+			return nil, withPrefix(fmt.Errorf("commit implicit transaction: %w", err))
 		}
 	}
 
@@ -313,14 +325,14 @@ func (s *Stmt) Query(args []driver.Value) (driver.Rows, error) {
 		_, err := s.conn.Begin()
 
 		if err != nil {
-			return nil, fmt.Errorf("start implicit transaction: %w", err)
+			return nil, withPrefix(fmt.Errorf("start implicit transaction: %w", err))
 		}
 	}
 
 	e, err := NewEngine(s.conn.activeTx.pager)
 
 	if err != nil {
-		return nil, err
+		return nil, withPrefix(err)
 	}
 
 	engineArgs := getEngineArgs(args)
@@ -328,14 +340,14 @@ func (s *Stmt) Query(args []driver.Value) (driver.Rows, error) {
 	scanner, err := e.Query(s.queryStmt, engineArgs)
 
 	if err != nil {
-		return nil, err
+		return nil, withPrefix(err)
 	}
 
 	if implicitTx {
 		err = s.conn.activeTx.Rollback() // Has no effect
 
 		if err != nil {
-			return nil, fmt.Errorf("rollback implicit transaction: %w", err)
+			return nil, withPrefix(fmt.Errorf("rollback implicit transaction: %w", err))
 		}
 	}
 
@@ -381,7 +393,7 @@ func (r *Rows) Columns() []string {
 func (r *Rows) Next(dest []driver.Value) error {
 	_, row, ok, err := r.scanner.Next()
 	if err != nil {
-		return err
+		return withPrefix(err)
 	}
 	if !ok {
 		return io.EOF
@@ -393,4 +405,9 @@ func (r *Rows) Next(dest []driver.Value) error {
 		}
 	}
 	return nil
+}
+
+// All errors that exit the library must be prefixed correctly
+func withPrefix(err error) error {
+	return fmt.Errorf("dblock: %w", err)
 }

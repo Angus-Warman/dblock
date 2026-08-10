@@ -23,7 +23,8 @@ func TestExecute(t *testing.T) {
 	res, err := db.Exec("CREATE TABLE data (label TEXT, value INTEGER)")
 	require.NoError(t, err)
 	require.NotNil(t, res)
-	assertExecFails(t, db, "CREATE TABLE data (label TEXT, value INTEGER)", "already exists")
+	err = assertExecFails(t, db, "CREATE TABLE data (label TEXT, value INTEGER)")
+	assertErrContains(t, err, "already exists")
 }
 
 func TestSelectTables(t *testing.T) {

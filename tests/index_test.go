@@ -16,7 +16,8 @@ func TestCreateUniqueIndex(t *testing.T) {
 	assertExec(t, db, "CREATE TABLE foo (id TEXT, value REAL)")
 	assertExec(t, db, "CREATE UNIQUE INDEX pk ON foo (id)")
 	assertExec(t, db, "INSERT INTO foo VALUES ('1', 1)")
-	assertExecFails(t, db, "INSERT INTO foo VALUES ('1', 1)", "already exists")
+	err := assertExecFails(t, db, "INSERT INTO foo VALUES ('1', 1)")
+	assertErrContains(t, err, "already exists")
 }
 
 func TestCreateUniqueIndexAfterInsert(t *testing.T) {
@@ -24,7 +25,8 @@ func TestCreateUniqueIndexAfterInsert(t *testing.T) {
 	assertExec(t, db, "CREATE TABLE foo (id TEXT, value REAL)")
 	assertExec(t, db, "INSERT INTO foo VALUES ('1', 1)")
 	assertExec(t, db, "CREATE UNIQUE INDEX pk ON foo (id)")
-	assertExecFails(t, db, "INSERT INTO foo VALUES ('1', 1)", "already exists")
+	err := assertExecFails(t, db, "INSERT INTO foo VALUES ('1', 1)")
+	assertErrContains(t, err, "already exists")
 }
 
 func TestCreateUniqueIndexAfterInserts(t *testing.T) {
@@ -32,7 +34,8 @@ func TestCreateUniqueIndexAfterInserts(t *testing.T) {
 	assertExec(t, db, "CREATE TABLE foo (id TEXT, value REAL)")
 	assertExec(t, db, "INSERT INTO foo VALUES ('1', 1)")
 	assertExec(t, db, "INSERT INTO foo VALUES ('1', 1)")
-	assertExecFails(t, db, "CREATE UNIQUE INDEX pk ON foo (id)", "already exists")
+	err := assertExecFails(t, db, "CREATE UNIQUE INDEX pk ON foo (id)")
+	assertErrContains(t, err, "already exists")
 }
 
 func TestUniqueIndexAppliesToUpdate(t *testing.T) {
@@ -41,5 +44,6 @@ func TestUniqueIndexAppliesToUpdate(t *testing.T) {
 	assertExec(t, db, "CREATE UNIQUE INDEX pk ON foo (id)")
 	assertExec(t, db, "INSERT INTO foo VALUES ('aaa', 'first')")
 	assertExec(t, db, "INSERT INTO foo VALUES ('bbb', 'second')")
-	assertExecFails(t, db, "UPDATE foo SET id = 'aaa' WHERE id = 'bbb'", "already exists")
+	err := assertExecFails(t, db, "UPDATE foo SET id = 'aaa' WHERE id = 'bbb'")
+	assertErrContains(t, err, "already exists")
 }

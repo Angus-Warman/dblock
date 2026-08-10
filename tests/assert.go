@@ -21,18 +21,24 @@ func assertExec(t *testing.T, db Execer, query string, args ...any) {
 	require.NoError(t, err)
 }
 
-func assertExecFails(t *testing.T, db Execer, query string, errMessage string, args ...any) {
+func assertExecFails(t *testing.T, db Execer, query string, args ...any) error {
 	t.Helper()
 	_, err := db.Exec(query, args...)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), errMessage)
+	return err
 }
 
-func assertQueryFails(t *testing.T, db Queryer, query string, errMessage string, args ...any) {
+func assertQueryFails(t *testing.T, db Queryer, query string, args ...any) error {
 	t.Helper()
 	_, err := db.Query(query, args...)
 	require.Error(t, err)
-	require.Contains(t, err.Error(), errMessage)
+	return err
+}
+
+func assertErrContains(t *testing.T, err error, msg string) {
+	t.Helper()
+	require.NotNil(t, err)
+	require.Contains(t, err.Error(), msg)
 }
 
 func assertQueryRows(t *testing.T, db *sql.DB, query string, expectedValues [][]any) {

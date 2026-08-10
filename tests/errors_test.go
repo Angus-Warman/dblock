@@ -1,41 +1,58 @@
 package tests
 
-import "testing"
+import (
+	"database/sql"
+	"testing"
+)
 
-func TestGarbageIn(t *testing.T) {
+func TestInvalidQuery(t *testing.T) {
 	db := openDB(t)
 
-	type testcase struct {
-		query  string
-		errMsg string
+	testcases := []string{
+		"abcde",
+		"SELECT",
+		"SELECT 1",
+		"SELECT FROM foo",
+		"INSERT INTO foo VALUES ('b')",
 	}
 
-	testcases := []testcase{
-		{
-			query:  "abcde",
-			errMsg: "",
-		},
-		{
-			query:  "SELECT",
-			errMsg: "",
-		},
-		{
-			query:  "SELECT 1",
-			errMsg: "",
-		},
-		{
-			query:  "SELECT FROM foo",
-			errMsg: "",
-		},
-		// {
-		// 	query:  "INSERT INTO foo VALUES ('b')",
-		// 	errMsg: "TODO",
-		// },
+	for _, query := range testcases {
+		t.Run(query, func(t *testing.T) {
+			err := assertQueryFails(t, db, query)
+			assertErrContains(t, err, "dblock: ")
+		})
+	}
+}
+
+func TestInvalidExec(t *testing.T) {
+	db := openDB(t)
+
+	testcases := []string{
+		"abcde",
+		"SELECT",
+		"SELECT 1",
+		"SELECT FROM foo",
+		"INSERT INTO foo VALUES ('b')",
 	}
 
-	for _, tc := range testcases {
-		t.Run(tc.query, func(t *testing.T) {
-			assertQueryFails(t, db, tc.query, tc.errMsg)
+	for _, query := range testcases {
+		t.Run(query, func(t *testing.T) {
+			err := assertExecFails(t, db, query)
+			assertErrContains(t, err, "dblock: ")
+		})
+	}
+}
+
+func TestInvalidDSN(t *testing.T) {
+	dsns := []string{
+		"",
+		"..",
+	}
+
+	for _, dsn := range dsns {
+		t.Run("dsn: "+dsn, func(t *testing.T) {
+			_, err := sql.Open("dblock", "")
+			assertErrContains(t, err, "dblock: ")
 		})
 	}
 }

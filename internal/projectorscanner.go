@@ -93,7 +93,7 @@ func NewProjectorScanner(base Scanner, stmt *SelectStmt, args []any) (Scanner, e
 		idx := slices.Index(columns, proj.source)
 
 		if idx < 0 {
-			return nil, fmt.Errorf("projector: no such column %q", proj.source)
+			return nil, fmt.Errorf("scanner: column '%v' does not exist", proj.source)
 		}
 
 		columnIdx[i] = idx

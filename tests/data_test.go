@@ -38,19 +38,22 @@ func TestUUIDRoundtripA(t *testing.T) {
 func TestCatchInvalidData(t *testing.T) {
 	db := openDB(t)
 	assertExec(t, db, "CREATE TABLE foo (value REAL)")
-	assertExecFails(t, db, "INSERT INTO foo VALUES (?)", "expects REAL, got string", "bar")
+	err := assertExecFails(t, db, "INSERT INTO foo VALUES (?)", "bar")
+	assertErrContains(t, err, "expects REAL, got string")
 }
 
 func TestCatchIntegerMismatch(t *testing.T) {
 	db := openDB(t)
 	assertExec(t, db, "CREATE TABLE foo (value INTEGER)")
-	assertExecFails(t, db, "INSERT INTO foo VALUES (?)", "expects INTEGER, got float", 1.5)
+	err := assertExecFails(t, db, "INSERT INTO foo VALUES (?)", 1.5)
+	assertErrContains(t, err, "expects INTEGER, got float")
 }
 
 func TestInsertNull(t *testing.T) {
 	db := openDB(t)
 	assertExec(t, db, "CREATE TABLE foo (value INTEGER)")
-	assertExecFails(t, db, "INSERT INTO foo VALUES (?)", "cannot insert null value", nil)
+	err := assertExecFails(t, db, "INSERT INTO foo VALUES (?)", nil)
+	assertErrContains(t, err, "cannot insert null value")
 }
 
 func TestInsertNullIntoAny(t *testing.T) {
