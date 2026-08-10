@@ -14,7 +14,7 @@ import (
 
 func resolveSelect(parsed *parser.SelectStmt) (*QueryStmt, error) {
 	if parsed.TableName == "" {
-		return nil, fmt.Errorf("table name empty")
+		return nil, fmt.Errorf("no table name in SELECT query")
 	}
 
 	m := NewExprMachine()

@@ -224,7 +224,7 @@ type SelectItem struct {
 }
 
 type Expr struct {
-	Factors []Factor `parser:"(@@)*"`
+	Factors []Factor `parser:"@@ (@@)*"`
 }
 
 type Factor struct {

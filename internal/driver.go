@@ -94,7 +94,13 @@ func (c *Conn) CheckNamedValue(nv *driver.NamedValue) error {
 }
 
 func (c *Conn) Prepare(query string) (driver.Stmt, error) {
-	return c.NewStmt(query)
+	stmt, err := c.NewStmt(query)
+
+	if err != nil {
+		return nil, fmt.Errorf("dblock: %w", err)
+	}
+
+	return stmt, nil
 }
 
 func (c *Conn) Close() error {
@@ -349,12 +355,12 @@ type Result struct {
 
 // LastInsertId implements [driver.Result].
 func (r *Result) LastInsertId() (int64, error) {
-	return -1, nil
+	return r.lastInsertID, nil
 }
 
 // RowsAffected implements [driver.Result].
 func (r *Result) RowsAffected() (int64, error) {
-	return -1, nil
+	return r.rowsAffected, nil
 }
 
 type Rows struct {
