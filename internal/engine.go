@@ -202,64 +202,6 @@ func (e *Engine) queryPragma(stmt *PragmaStmt) (Scanner, error) {
 	return NewCustomScanner([]string{string(stmt.property)}, [][]any{{val}}), nil
 }
 
-func (e *Engine) querySelect(stmt *SelectStmt, args []any) (Scanner, error) {
-	scanner, err := e.SelectAllFromTable(stmt.tableName)
-
-	if err != nil {
-		return nil, err
-	}
-
-	for _, join := range stmt.joins {
-		right, err := e.SelectAllFromTable(join.tableName)
-
-		if err != nil {
-			return nil, err
-		}
-
-		scanner, err = NewJoinScanner(scanner, right, stmt, &join, args)
-
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	if stmt.where != nil {
-		scanner, err = NewFilterScanner(scanner, stmt.where, args)
-
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	if hasAggregates(stmt) {
-		scanner, err = NewAggregateScanner(scanner, stmt, args)
-
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	if stmt.orders != nil {
-		scanner, err = NewOrderScanner(scanner, stmt, args)
-
-		if err != nil {
-			return nil, err
-		}
-	}
-
-	if hasAggregates(stmt) {
-		return scanner, nil
-	}
-
-	scanner, err = NewProjectorScanner(scanner, stmt, args)
-
-	if err != nil {
-		return nil, err
-	}
-
-	return scanner, nil
-}
-
 // hasAggregates reports whether the statement needs aggregation: a GROUP BY
 // clause, or any aggregate function call in the projection.
 func hasAggregates(stmt *SelectStmt) bool {
@@ -276,7 +218,7 @@ func hasAggregates(stmt *SelectStmt) bool {
 	return false
 }
 
-func (e *Engine) SelectAllFromTable(tableName string) (Scanner, error) {
+func (e *Engine) CreateFullScanner(tableName string) (Scanner, error) {
 	if tableName == "dblock_schema" {
 		rootpage := 0
 		tree := NewBtree(e.pager, PageID(rootpage))
@@ -286,7 +228,7 @@ func (e *Engine) SelectAllFromTable(tableName string) (Scanner, error) {
 	info, err := e.lookupTable(tableName)
 
 	if err != nil {
-		return nil, fmt.Errorf("SelectAllFromTable: %w", err)
+		return nil, fmt.Errorf("create full scanner: %w", err)
 	}
 
 	tree := NewBtree(e.pager, info.rootPage)
@@ -940,7 +882,7 @@ func (e *Engine) createIndex(stmt *CreateIdxStmt) error {
 		return err
 	}
 
-	scanner, err := e.SelectAllFromTable(table.table.name)
+	scanner, err := e.CreateFullScanner(table.table.name)
 
 	if err != nil {
 		return err

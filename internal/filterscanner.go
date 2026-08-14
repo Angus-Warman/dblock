@@ -7,26 +7,42 @@ import (
 // FilterScanner filters rows from a base scanner by evaluating a resolved
 // WHERE expression per row, keeping only rows where it evaluates to true.
 type FilterScanner struct {
-	base Scanner
-	expr *Expr
-	args []any
+	base  Scanner
+	where *Expr
+	args  []any
+}
+
+func NewFilterScanner(base Scanner, where *Expr, args []any) (Scanner, error) {
+	if base == nil {
+		return nil, fmt.Errorf("where: base scanner is nil")
+	}
+
+	if where == nil {
+		return nil, fmt.Errorf("where: expression is nil")
+	}
+
+	return &FilterScanner{
+		base:  base,
+		where: where,
+		args:  args,
+	}, nil
 }
 
 // Columns implements [Scanner].
-func (w *FilterScanner) Columns() []string {
-	return w.base.Columns()
+func (s *FilterScanner) Columns() []string {
+	return s.base.Columns()
 }
 
 // Next implements [Scanner].
-func (w *FilterScanner) Next() (key []byte, row Row, ok bool, err error) {
+func (s *FilterScanner) Next() (key []byte, row Row, ok bool, err error) {
 	for {
-		key, row, ok, err = w.base.Next()
+		key, row, ok, err = s.base.Next()
 
 		if !ok || err != nil {
 			return nil, Row{}, ok, err
 		}
 
-		val, err := evalExpr(w.expr, w.base.Columns(), row.Values, w.args)
+		val, err := evalExpr(s.where, s.base.Columns(), row.Values, s.args)
 
 		if err != nil {
 			return nil, Row{}, false, err
@@ -42,20 +58,4 @@ func (w *FilterScanner) Next() (key []byte, row Row, ok bool, err error) {
 			return key, row, true, nil
 		}
 	}
-}
-
-func NewFilterScanner(base Scanner, expr *Expr, args []any) (Scanner, error) {
-	if base == nil {
-		return nil, fmt.Errorf("where: base scanner is nil")
-	}
-
-	if expr == nil {
-		return nil, fmt.Errorf("where: expression is nil")
-	}
-
-	return &FilterScanner{
-		base: base,
-		expr: expr,
-		args: args,
-	}, nil
 }
