@@ -10,6 +10,7 @@ import (
 )
 
 type Row struct {
+	ID     RowID
 	Values []any
 }
 
@@ -190,6 +191,7 @@ func GetRowValueAs[T any](r *Row, colIdx int) (T, error) {
 
 func (r *Row) Clone() Row {
 	cloned := Row{
+		ID:     r.ID,
 		Values: make([]any, len(r.Values)),
 	}
 

@@ -93,13 +93,13 @@ func NewOrderScanner(base Scanner, stmt *SelectStmt, args []any) (Scanner, error
 }
 
 func compareRows(a, b Row, columns []string, by OrderStmt, args []any) (int, error) {
-	aVal, err := evalExpr(by.Expr, columns, a.Values, args)
+	aVal, err := evalExpr(by.Expr, columns, a, args)
 
 	if err != nil {
 		return 0, err
 	}
 
-	bVal, err := evalExpr(by.Expr, columns, b.Values, args)
+	bVal, err := evalExpr(by.Expr, columns, b, args)
 
 	if err != nil {
 		return 0, err

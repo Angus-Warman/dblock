@@ -31,7 +31,7 @@ func (p *ProjectorScanner) Next() (key []byte, row Row, ok bool, err error) {
 
 	for i := range values {
 		if p.exprs[i] != nil {
-			values[i], err = evalExpr(p.exprs[i], columns, fullRow.Values, p.args)
+			values[i], err = evalExpr(p.exprs[i], columns, fullRow, p.args)
 
 			if err != nil {
 				return nil, Row{}, false, err
@@ -43,7 +43,7 @@ func (p *ProjectorScanner) Next() (key []byte, row Row, ok bool, err error) {
 		values[i] = fullRow.Values[p.columnIdx[i]]
 	}
 
-	return key, Row{Values: values}, true, nil
+	return key, Row{Values: values, ID: fullRow.ID}, true, nil
 }
 
 func NewProjectorScanner(base Scanner, stmt *SelectStmt, args []any) (Scanner, error) {

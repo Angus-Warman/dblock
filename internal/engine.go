@@ -210,9 +210,18 @@ func hasAggregates(stmt *SelectStmt) bool {
 	}
 
 	for _, item := range stmt.projection {
-		if item.expr != nil && item.expr.Kind == FuncKind {
+		if item.expr != nil && item.expr.Kind == FuncKind && isAggregateFunc(item.expr.FuncCall.Name) {
 			return true
 		}
+	}
+
+	return false
+}
+
+func isAggregateFunc(name FuncName) bool {
+	switch name {
+	case CountFunc, MinFunc, MaxFunc, SumFunc, AvgFunc:
+		return true
 	}
 
 	return false
@@ -332,7 +341,7 @@ func (e *Engine) Insert(stmt *InsertStmt, args []any) (insertedID int64, rowsAff
 		rowValues[i] = coerced
 	}
 
-	row := Row{Values: rowValues}
+	row := Row{Values: rowValues, ID: rowID}
 	encodedRow := row.Encode()
 
 	if err := tree.InsertAt(rowID, encodedRow); err != nil {
@@ -365,8 +374,7 @@ func (e *Engine) Insert(stmt *InsertStmt, args []any) (insertedID int64, rowsAff
 // Missing columns and DEFAULT keywords are filled from the column definition,
 // evaluated left-to-right so a default may reference earlier columns. rowID
 // is the id of the row about to be inserted, for ROWID() defaults.
-func buildRowValues(columns []Column, named []string, values []any, rowID RowID) ([]any, error) {
-	if len(named) == 0 {
+func buildRowValues(columns []Column, named []string, values []any, rowID RowID) ([]any, error) {	if len(named) == 0 {
 		if len(values) > len(columns) {
 			return nil, fmt.Errorf("Insert: expected %d values, got %d", len(columns), len(values))
 		}
@@ -406,12 +414,14 @@ func buildRowValues(columns []Column, named []string, values []any, rowID RowID)
 
 	row := make([]any, len(columns))
 
+	evalRow := Row{ID: rowID, Values: row}
+
 	for i := range columns {
 		v, supplied := pending[i]
 
 		if supplied {
 			if _, isDefault := v.(DefaultKeyword); isDefault {
-				dv, err := evalDefaultExpr(columns[i], colNames, row, rowID)
+				dv, err := evalDefaultExpr(columns[i], colNames, evalRow)
 
 				if err != nil {
 					return nil, err
@@ -425,7 +435,7 @@ func buildRowValues(columns []Column, named []string, values []any, rowID RowID)
 			continue
 		}
 
-		dv, err := evalDefaultExpr(columns[i], colNames, row, rowID)
+		dv, err := evalDefaultExpr(columns[i], colNames, evalRow)
 
 		if err != nil {
 			return nil, err
@@ -533,8 +543,10 @@ func (e *Engine) Update(stmt *UpdateStmt, args []any) (int64, error) {
 			return -1, err
 		}
 
+		originalRow.ID = DecodeKey(keys[i])
+
 		if stmt.where != nil {
-			val, err := evalExpr(stmt.where, info.columns, originalRow.Values, args)
+			val, err := evalExpr(stmt.where, info.columns, originalRow, args)
 
 			if err != nil {
 				return -1, err
@@ -553,7 +565,7 @@ func (e *Engine) Update(stmt *UpdateStmt, args []any) (int64, error) {
 
 		updatedRow := originalRow.Clone()
 
-		val, err := evalExpr(stmt.expr, info.columns, originalRow.Values, args)
+		val, err := evalExpr(stmt.expr, info.columns, originalRow, args)
 
 		if err != nil {
 			return -1, err
@@ -674,7 +686,7 @@ func (e *Engine) addColumn(table *Table, op *AddColumnOp, rootPage PageID) error
 
 	table.columns = append(table.columns, op.column)
 
-	value, err := evalDefaultExpr(op.column, table.ColumnNames(), nil, 0)
+	value, err := evalDefaultExpr(op.column, table.ColumnNames(), Row{})
 
 	if err != nil {
 		return err

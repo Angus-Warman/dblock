@@ -163,7 +163,7 @@ func (s *AggregateScanner) bufferGroups(base Scanner) error {
 			}
 
 			for i, pt := range s.passThroughs {
-				val, err := evalExpr(pt.expr, s.baseColumns, row.Values, s.args)
+				val, err := evalExpr(pt.expr, s.baseColumns, row, s.args)
 				if err != nil {
 					return fmt.Errorf("func: pass-through %q: %w", pt.name, err)
 				}
@@ -205,7 +205,7 @@ func (s *AggregateScanner) groupKey(row Row) (string, error) {
 	parts := make([]string, len(s.groupExprs))
 
 	for i, expr := range s.groupExprs {
-		val, err := evalExpr(expr, s.baseColumns, row.Values, s.args)
+		val, err := evalExpr(expr, s.baseColumns, row, s.args)
 		if err != nil {
 			return "", fmt.Errorf("func: group by: %w", err)
 		}
@@ -231,7 +231,7 @@ func (s *AggregateScanner) accumulate(g *funcGroup, row Row) error {
 			return fmt.Errorf("func: %s requires an argument", fun.Name)
 		}
 
-		val, err := evalExpr(&fun.Args[0], s.baseColumns, row.Values, s.args)
+		val, err := evalExpr(&fun.Args[0], s.baseColumns, row, s.args)
 		if err != nil {
 			return fmt.Errorf("func: %s: %w", fun.Name, err)
 		}

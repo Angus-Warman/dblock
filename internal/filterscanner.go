@@ -42,7 +42,7 @@ func (s *FilterScanner) Next() (key []byte, row Row, ok bool, err error) {
 			return nil, Row{}, ok, err
 		}
 
-		val, err := evalExpr(s.where, s.base.Columns(), row.Values, s.args)
+		val, err := evalExpr(s.where, s.base.Columns(), row, s.args)
 
 		if err != nil {
 			return nil, Row{}, false, err
