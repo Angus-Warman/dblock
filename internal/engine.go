@@ -747,7 +747,17 @@ func (e *Engine) ExecCreate(stmt *CreateStmt) error {
 		columns: stmt.columns,
 	}
 
-	return e.CreateTable(def)
+	if err := e.CreateTable(def); err != nil {
+		return err
+	}
+
+	for _, col := range stmt.uniqueCols {
+		if err := e.createIndexObject(def, fmt.Sprintf("index_%s_%s", def.name, col), []string{col}, true); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (e *Engine) CreateTable(def *Table) error {
@@ -853,22 +863,26 @@ func (e *Engine) createIndex(stmt *CreateIdxStmt) error {
 		}
 	}
 
+	return e.createIndexObject(table.table, stmt.idxName, stmt.columnNames, stmt.unique)
+}
+
+func (e *Engine) createIndexObject(table *Table, idxName string, columnNames []string, unique bool) error {
 	idxDef := &IndexDefinition{
-		TableName: stmt.tableName,
-		Unique:    stmt.unique,
-		Columns:   stmt.columnNames,
+		TableName: table.name,
+		Unique:    unique,
+		Columns:   columnNames,
 	}
 
 	rootpage := e.pager.NextID()
 
 	obj := &SchemaObject{
-		name:       stmt.idxName,
+		name:       idxName,
 		objectType: IndexObject,
 		definition: idxDef.Encode(),
 		rootpage:   rootpage,
 	}
 
-	err = e.SaveSchemaObject(obj)
+	err := e.SaveSchemaObject(obj)
 
 	if err != nil {
 		return err
@@ -876,13 +890,13 @@ func (e *Engine) createIndex(stmt *CreateIdxStmt) error {
 
 	idxTree := NewBtree(e.pager, obj.rootpage)
 
-	idx, err := IndexFromDefinition(*idxDef, table.table, idxTree)
+	idx, err := IndexFromDefinition(*idxDef, table, idxTree)
 
 	if err != nil {
 		return err
 	}
 
-	scanner, err := e.CreateFullScanner(table.table.name)
+	scanner, err := e.CreateFullScanner(table.name)
 
 	if err != nil {
 		return err

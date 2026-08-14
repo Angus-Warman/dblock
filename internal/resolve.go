@@ -216,7 +216,18 @@ func columnName(expr *parser.Expr) (string, error) {
 
 func resolveCreate(parsed *parser.CreateStmt) (*ExecStmt, error) {
 	columns := make([]Column, len(parsed.Columns))
+	uniqueCols := []string{}
+	seenPrimaryKey := false
+
 	for i, c := range parsed.Columns {
+		if c.IsPrimaryKey && seenPrimaryKey {
+			return nil, fmt.Errorf("multiple primary keys defined")
+		}
+
+		if c.IsPrimaryKey {
+			seenPrimaryKey = true
+		}
+
 		dt, err := parseDataType(c.Type)
 
 		if err != nil {
@@ -229,11 +240,17 @@ func resolveCreate(parsed *parser.CreateStmt) (*ExecStmt, error) {
 			col.defaultExpr = parser.RenderExpr(&c.Default.Expr)
 		}
 		columns[i] = col
+
+		if c.IsUnique || c.IsPrimaryKey {
+			uniqueCols = append(uniqueCols, c.Name)
+		}
 	}
+
 	execStmt := &ExecStmt{
 		createStmt: &CreateStmt{
-			tableName: parsed.TableName,
-			columns:   columns,
+			tableName:  parsed.TableName,
+			columns:    columns,
+			uniqueCols: uniqueCols,
 		},
 	}
 	return execStmt, nil

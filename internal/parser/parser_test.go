@@ -98,3 +98,15 @@ func TestParseDefaultColumnValue(t *testing.T) {
 	p := mustParse(t, "CREATE TABLE foo (id TEXT, status INTEGER DEFAULT 1)")
 	require.NotNil(t, p.Create.Columns[1].Default)
 }
+
+func TestParseColumnUnique(t *testing.T) {
+	p := mustParse(t, "CREATE TABLE foo (id TEXT UNIQUE, value REAL)")
+	require.True(t, p.Create.Columns[0].IsUnique)
+	require.False(t, p.Create.Columns[1].IsUnique)
+}
+
+func TestParseColumnPrimaryKey(t *testing.T) {
+	p := mustParse(t, "CREATE TABLE foo (id TEXT PRIMARY KEY, value REAL)")
+	require.True(t, p.Create.Columns[0].IsPrimaryKey)
+	require.False(t, p.Create.Columns[1].IsPrimaryKey)
+}
