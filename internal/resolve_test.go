@@ -119,6 +119,32 @@ func TestResolveCreateUniqueAndPrimaryKeyOnSameColumn(t *testing.T) {
 	require.Equal(t, []string{"id"}, stmt.uniqueCols)
 }
 
+func TestResolveCreateIntegerPrimaryKeyDefault(t *testing.T) {
+	stmt := mustCreate(t, "CREATE TABLE foo (id INTEGER PRIMARY KEY, name TEXT)")
+	require.Equal(t, "ROWID()", stmt.columns[0].defaultExpr)
+	require.Empty(t, stmt.columns[1].defaultExpr)
+}
+
+func TestResolveCreateUUIDPrimaryKeyDefault(t *testing.T) {
+	stmt := mustCreate(t, "CREATE TABLE foo (id UUID PRIMARY KEY, name TEXT)")
+	require.Equal(t, "NEW_UUID()", stmt.columns[0].defaultExpr)
+}
+
+func TestResolveCreateTextPrimaryKeyNoDefault(t *testing.T) {
+	stmt := mustCreate(t, "CREATE TABLE foo (id TEXT PRIMARY KEY, name TEXT)")
+	require.Empty(t, stmt.columns[0].defaultExpr)
+}
+
+func TestResolveCreateExplicitDefaultWins(t *testing.T) {
+	stmt := mustCreate(t, "CREATE TABLE foo (id INTEGER PRIMARY KEY DEFAULT 42, name TEXT)")
+	require.Equal(t, "42", stmt.columns[0].defaultExpr)
+}
+
+func TestResolveCreateUniqueColumnNoDefault(t *testing.T) {
+	stmt := mustCreate(t, "CREATE TABLE foo (id TEXT UNIQUE, name TEXT)")
+	require.Empty(t, stmt.columns[0].defaultExpr)
+}
+
 func assertErrContains(t *testing.T, err error, msg string) {
 	t.Helper()
 	require.NotNil(t, err)

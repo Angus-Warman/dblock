@@ -3,6 +3,7 @@ package internal
 import (
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -123,6 +124,52 @@ func TestEvalResolvedExpression(t *testing.T) {
 	got, err := evalExpr(resolved, []string{"a", "b"}, []any{3.5, 4.5}, nil)
 	require.NoError(t, err)
 	require.Equal(t, 15.75, got)
+}
+
+func TestEvalUuidFunc(t *testing.T) {
+	expr := &Expr{Kind: FuncKind, FuncCall: &FuncExpr{Name: UuidFunc}}
+	got, err := evalFunc(expr, nil, nil, nil, 0)
+	require.NoError(t, err)
+
+	id, ok := got.(uuid.UUID)
+	require.True(t, ok, "UUID() should return a uuid.UUID, got %T", got)
+	require.NotEqual(t, uuid.Nil, id)
+}
+
+func TestEvalRowIdFunc(t *testing.T) {
+	expr := &Expr{Kind: FuncKind, FuncCall: &FuncExpr{Name: RowIdFunc}}
+	got, err := evalFunc(expr, nil, nil, nil, RowID(7))
+	require.NoError(t, err)
+	require.Equal(t, int64(7), got)
+}
+
+func TestEvalRowIdFuncNoContext(t *testing.T) {
+	expr := &Expr{Kind: FuncKind, FuncCall: &FuncExpr{Name: RowIdFunc}}
+	_, err := evalFunc(expr, nil, nil, nil, 0)
+	require.Error(t, err)
+}
+
+func TestEvalUnsupportedFunc(t *testing.T) {
+	expr := &Expr{Kind: FuncKind, FuncCall: &FuncExpr{Name: "NOPE"}}
+	_, err := evalFunc(expr, nil, nil, nil, 0)
+	require.Error(t, err)
+}
+
+func TestResolveRowIdAndUuidFuncs(t *testing.T) {
+	for _, name := range []string{"ROWID", "NEW_UUID"} {
+		p := mustParse(t, "SELECT "+name+"() FROM foo")
+		expr, err := NewExprMachine().resolveExpr(p.Select.List.Items[0].Expr)
+		require.NoError(t, err)
+		require.Equal(t, FuncKind, expr.Kind)
+		require.Equal(t, FuncName(name), expr.FuncCall.Name)
+		require.Empty(t, expr.FuncCall.Args)
+	}
+}
+
+func TestResolveRowIdFuncWithArgsRejected(t *testing.T) {
+	p := mustParse(t, "SELECT ROWID(1) FROM foo")
+	_, err := NewExprMachine().resolveExpr(p.Select.List.Items[0].Expr)
+	require.Error(t, err)
 }
 
 func TestResolveProjectionExpression(t *testing.T) {

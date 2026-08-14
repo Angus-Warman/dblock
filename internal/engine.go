@@ -308,7 +308,15 @@ func (e *Engine) Insert(stmt *InsertStmt, args []any) (insertedID int64, rowsAff
 		values = append(values, v)
 	}
 
-	rowValues, err := buildRowValues(info.table.columns, stmt.columns, values)
+	tree := NewBtree(e.pager, info.rootPage)
+
+	rowID, err := tree.NextIntegerKey()
+
+	if err != nil {
+		return -1, -1, err
+	}
+
+	rowValues, err := buildRowValues(info.table.columns, stmt.columns, values, rowID)
 
 	if err != nil {
 		return -1, -1, err
@@ -326,10 +334,8 @@ func (e *Engine) Insert(stmt *InsertStmt, args []any) (insertedID int64, rowsAff
 
 	row := Row{Values: rowValues}
 	encodedRow := row.Encode()
-	tree := NewBtree(e.pager, info.rootPage)
-	rowID, err := tree.InsertNext(encodedRow)
 
-	if err != nil {
+	if err := tree.InsertAt(rowID, encodedRow); err != nil {
 		return -1, -1, err
 	}
 
@@ -357,8 +363,9 @@ func (e *Engine) Insert(stmt *InsertStmt, args []any) (insertedID int64, rowsAff
 // buildRowValues maps supplied insert values onto full row values. With named
 // columns each value targets that column; otherwise values are positional.
 // Missing columns and DEFAULT keywords are filled from the column definition,
-// evaluated left-to-right so a default may reference earlier columns.
-func buildRowValues(columns []Column, named []string, values []any) ([]any, error) {
+// evaluated left-to-right so a default may reference earlier columns. rowID
+// is the id of the row about to be inserted, for ROWID() defaults.
+func buildRowValues(columns []Column, named []string, values []any, rowID RowID) ([]any, error) {
 	if len(named) == 0 {
 		if len(values) > len(columns) {
 			return nil, fmt.Errorf("Insert: expected %d values, got %d", len(columns), len(values))
@@ -404,7 +411,7 @@ func buildRowValues(columns []Column, named []string, values []any) ([]any, erro
 
 		if supplied {
 			if _, isDefault := v.(DefaultKeyword); isDefault {
-				dv, err := evalDefaultExpr(columns[i], colNames, row)
+				dv, err := evalDefaultExpr(columns[i], colNames, row, rowID)
 
 				if err != nil {
 					return nil, err
@@ -418,7 +425,7 @@ func buildRowValues(columns []Column, named []string, values []any) ([]any, erro
 			continue
 		}
 
-		dv, err := evalDefaultExpr(columns[i], colNames, row)
+		dv, err := evalDefaultExpr(columns[i], colNames, row, rowID)
 
 		if err != nil {
 			return nil, err
@@ -667,7 +674,7 @@ func (e *Engine) addColumn(table *Table, op *AddColumnOp, rootPage PageID) error
 
 	table.columns = append(table.columns, op.column)
 
-	value, err := evalDefaultExpr(op.column, table.ColumnNames(), nil)
+	value, err := evalDefaultExpr(op.column, table.ColumnNames(), nil, 0)
 
 	if err != nil {
 		return err

@@ -236,8 +236,17 @@ func resolveCreate(parsed *parser.CreateStmt) (*ExecStmt, error) {
 
 		col := Column{name: c.Name, dataType: dt}
 
-		if c.Default != nil {
+		switch {
+		case c.Default != nil:
 			col.defaultExpr = parser.RenderExpr(&c.Default.Expr)
+
+		case c.IsPrimaryKey:
+			switch dt {
+			case IntegerType:
+				col.defaultExpr = "ROWID()"
+			case UUIDType:
+				col.defaultExpr = "NEW_UUID()"
+			}
 		}
 		columns[i] = col
 
