@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/google/uuid"
+	"uuid"
 
 	"github.com/Angus-Warman/dblock/internal/parser"
 )

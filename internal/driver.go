@@ -8,7 +8,7 @@ import (
 
 	"github.com/Angus-Warman/dblock/internal/parser"
 
-	"github.com/google/uuid"
+	"uuid"
 )
 
 type Driver struct {

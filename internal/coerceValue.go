@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/google/uuid"
+	"uuid"
 )
 
 func zeroValue(dt DataType) any {

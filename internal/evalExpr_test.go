@@ -3,7 +3,8 @@ package internal
 import (
 	"testing"
 
-	"github.com/google/uuid"
+	"uuid"
+
 	"github.com/stretchr/testify/require"
 )
 
@@ -133,7 +134,7 @@ func TestEvalUuidFunc(t *testing.T) {
 
 	id, ok := got.(uuid.UUID)
 	require.True(t, ok, "UUID() should return a uuid.UUID, got %T", got)
-	require.NotEqual(t, uuid.Nil, id)
+	require.NotEqual(t, uuid.Nil(), id)
 }
 
 func TestEvalRowIdFunc(t *testing.T) {

@@ -6,7 +6,7 @@ import (
 
 	"github.com/Angus-Warman/dblock/internal/codec"
 
-	"github.com/google/uuid"
+	"uuid"
 )
 
 type Row struct {

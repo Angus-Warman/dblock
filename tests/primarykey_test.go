@@ -3,7 +3,8 @@ package tests
 import (
 	"testing"
 
-	"github.com/google/uuid"
+	"uuid"
+
 	"github.com/stretchr/testify/require"
 )
 

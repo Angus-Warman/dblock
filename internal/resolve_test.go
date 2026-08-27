@@ -5,7 +5,8 @@ import (
 
 	"github.com/Angus-Warman/dblock/internal/parser"
 
-	"github.com/google/uuid"
+	"uuid"
+
 	"github.com/stretchr/testify/require"
 )
 

@@ -9,7 +9,7 @@ import (
 	"github.com/Angus-Warman/dblock/internal/parser"
 	"github.com/Angus-Warman/dblock/internal/pragma"
 
-	"github.com/google/uuid"
+	"uuid"
 )
 
 func resolveSelect(parsed *parser.SelectStmt) (*QueryStmt, error) {
