@@ -113,7 +113,7 @@ func (j *JoinScanner) Next() (key []byte, row Row, ok bool, err error) {
 
 			combined := combineRows(j.currentLeft.row, rightEntry.row)
 
-			val, err := evalExpr(j.onExpr, j.columns, combined.Values, j.args)
+			val, err := evalExpr(j.onExpr, j.columns, combined, j.args)
 
 			if err != nil {
 				return nil, Row{}, false, err
@@ -195,7 +195,7 @@ func combineRows(left, right Row) Row {
 	vals = append(vals, left.Values...)
 	vals = append(vals, right.Values...)
 
-	return Row{Values: vals}
+	return Row{ID: left.ID, Values: vals}
 }
 
 func nullPadRight(left Row, rightColCount int) Row {
@@ -206,7 +206,7 @@ func nullPadRight(left Row, rightColCount int) Row {
 		vals = append(vals, nil)
 	}
 
-	return Row{Values: vals}
+	return Row{ID: left.ID, Values: vals}
 }
 
 func nullPadLeft(leftColCount int, right Row) Row {

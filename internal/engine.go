@@ -210,9 +210,18 @@ func hasAggregates(stmt *SelectStmt) bool {
 	}
 
 	for _, item := range stmt.projection {
-		if item.expr != nil && item.expr.Kind == FuncKind {
+		if item.expr != nil && item.expr.Kind == FuncKind && isAggregateFunc(item.expr.FuncCall.Name) {
 			return true
 		}
+	}
+
+	return false
+}
+
+func isAggregateFunc(name FuncName) bool {
+	switch name {
+	case CountFunc, MinFunc, MaxFunc, SumFunc, AvgFunc:
+		return true
 	}
 
 	return false
@@ -308,7 +317,15 @@ func (e *Engine) Insert(stmt *InsertStmt, args []any) (insertedID int64, rowsAff
 		values = append(values, v)
 	}
 
-	rowValues, err := buildRowValues(info.table.columns, stmt.columns, values)
+	tree := NewBtree(e.pager, info.rootPage)
+
+	rowID, err := tree.NextRowID()
+
+	if err != nil {
+		return -1, -1, err
+	}
+
+	rowValues, err := buildRowValues(info.table.columns, stmt.columns, values, rowID)
 
 	if err != nil {
 		return -1, -1, err
@@ -324,12 +341,10 @@ func (e *Engine) Insert(stmt *InsertStmt, args []any) (insertedID int64, rowsAff
 		rowValues[i] = coerced
 	}
 
-	row := Row{Values: rowValues}
+	row := Row{Values: rowValues, ID: rowID}
 	encodedRow := row.Encode()
-	tree := NewBtree(e.pager, info.rootPage)
-	rowID, err := tree.InsertNext(encodedRow)
 
-	if err != nil {
+	if err := tree.InsertAt(rowID, encodedRow); err != nil {
 		return -1, -1, err
 	}
 
@@ -357,8 +372,9 @@ func (e *Engine) Insert(stmt *InsertStmt, args []any) (insertedID int64, rowsAff
 // buildRowValues maps supplied insert values onto full row values. With named
 // columns each value targets that column; otherwise values are positional.
 // Missing columns and DEFAULT keywords are filled from the column definition,
-// evaluated left-to-right so a default may reference earlier columns.
-func buildRowValues(columns []Column, named []string, values []any) ([]any, error) {
+// evaluated left-to-right so a default may reference earlier columns. rowID
+// is the id of the row about to be inserted, for ROWID() defaults.
+func buildRowValues(columns []Column, named []string, values []any, rowID RowID) ([]any, error) {
 	if len(named) == 0 {
 		if len(values) > len(columns) {
 			return nil, fmt.Errorf("Insert: expected %d values, got %d", len(columns), len(values))
@@ -399,12 +415,14 @@ func buildRowValues(columns []Column, named []string, values []any) ([]any, erro
 
 	row := make([]any, len(columns))
 
+	evalRow := Row{ID: rowID, Values: row}
+
 	for i := range columns {
 		v, supplied := pending[i]
 
 		if supplied {
 			if _, isDefault := v.(DefaultKeyword); isDefault {
-				dv, err := evalDefaultExpr(columns[i], colNames, row)
+				dv, err := evalDefaultExpr(columns[i], colNames, evalRow)
 
 				if err != nil {
 					return nil, err
@@ -418,7 +436,7 @@ func buildRowValues(columns []Column, named []string, values []any) ([]any, erro
 			continue
 		}
 
-		dv, err := evalDefaultExpr(columns[i], colNames, row)
+		dv, err := evalDefaultExpr(columns[i], colNames, evalRow)
 
 		if err != nil {
 			return nil, err
@@ -526,8 +544,10 @@ func (e *Engine) Update(stmt *UpdateStmt, args []any) (int64, error) {
 			return -1, err
 		}
 
+		originalRow.ID = DecodeKey(keys[i])
+
 		if stmt.where != nil {
-			val, err := evalExpr(stmt.where, info.columns, originalRow.Values, args)
+			val, err := evalExpr(stmt.where, info.columns, originalRow, args)
 
 			if err != nil {
 				return -1, err
@@ -546,7 +566,7 @@ func (e *Engine) Update(stmt *UpdateStmt, args []any) (int64, error) {
 
 		updatedRow := originalRow.Clone()
 
-		val, err := evalExpr(stmt.expr, info.columns, originalRow.Values, args)
+		val, err := evalExpr(stmt.expr, info.columns, originalRow, args)
 
 		if err != nil {
 			return -1, err
@@ -667,7 +687,7 @@ func (e *Engine) addColumn(table *Table, op *AddColumnOp, rootPage PageID) error
 
 	table.columns = append(table.columns, op.column)
 
-	value, err := evalDefaultExpr(op.column, table.ColumnNames(), nil)
+	value, err := evalDefaultExpr(op.column, table.ColumnNames(), Row{})
 
 	if err != nil {
 		return err
@@ -747,7 +767,17 @@ func (e *Engine) ExecCreate(stmt *CreateStmt) error {
 		columns: stmt.columns,
 	}
 
-	return e.CreateTable(def)
+	if err := e.CreateTable(def); err != nil {
+		return err
+	}
+
+	for _, col := range stmt.uniqueCols {
+		if err := e.createIndexObject(def, fmt.Sprintf("index_%s_%s", def.name, col), []string{col}, true); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (e *Engine) CreateTable(def *Table) error {
@@ -853,22 +883,26 @@ func (e *Engine) createIndex(stmt *CreateIdxStmt) error {
 		}
 	}
 
+	return e.createIndexObject(table.table, stmt.idxName, stmt.columnNames, stmt.unique)
+}
+
+func (e *Engine) createIndexObject(table *Table, idxName string, columnNames []string, unique bool) error {
 	idxDef := &IndexDefinition{
-		TableName: stmt.tableName,
-		Unique:    stmt.unique,
-		Columns:   stmt.columnNames,
+		TableName: table.name,
+		Unique:    unique,
+		Columns:   columnNames,
 	}
 
 	rootpage := e.pager.NextID()
 
 	obj := &SchemaObject{
-		name:       stmt.idxName,
+		name:       idxName,
 		objectType: IndexObject,
 		definition: idxDef.Encode(),
 		rootpage:   rootpage,
 	}
 
-	err = e.SaveSchemaObject(obj)
+	err := e.SaveSchemaObject(obj)
 
 	if err != nil {
 		return err
@@ -876,13 +910,13 @@ func (e *Engine) createIndex(stmt *CreateIdxStmt) error {
 
 	idxTree := NewBtree(e.pager, obj.rootpage)
 
-	idx, err := IndexFromDefinition(*idxDef, table.table, idxTree)
+	idx, err := IndexFromDefinition(*idxDef, table, idxTree)
 
 	if err != nil {
 		return err
 	}
 
-	scanner, err := e.CreateFullScanner(table.table.name)
+	scanner, err := e.CreateFullScanner(table.name)
 
 	if err != nil {
 		return err

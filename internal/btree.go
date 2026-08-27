@@ -155,7 +155,7 @@ func (t *Tree) Insert(key, value []byte) error {
 }
 
 func (t *Tree) InsertNext(value []byte) (RowID, error) {
-	rowID, err := t.NextIntegerKey()
+	rowID, err := t.NextRowID()
 
 	if err != nil {
 		return 0, err
@@ -428,7 +428,7 @@ func (t *Tree) LastKey() ([]byte, error) {
 	return leaf.Keys[len(leaf.Keys)-1], nil
 }
 
-func (t *Tree) NextIntegerKey() (RowID, error) {
+func (t *Tree) NextRowID() (RowID, error) {
 	buf, err := t.LastKey()
 
 	if err != nil {

@@ -13,8 +13,9 @@ type ExecStmt struct {
 }
 
 type CreateStmt struct {
-	tableName string
-	columns   []Column
+	tableName  string
+	columns    []Column
+	uniqueCols []string
 }
 
 type CreateIdxStmt struct {

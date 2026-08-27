@@ -5,13 +5,16 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/google/uuid"
+
 	"github.com/Angus-Warman/dblock/internal/parser"
 )
 
 // evalExpr evaluates a resolved expression tree against a single row. columns
-// names each value in values (the base scanner's column list), so column
-// references can be resolved by name.
-func evalExpr(expr *Expr, columns []string, values []any, args []any) (any, error) {
+// names each value in row.Values (the base scanner's column list), so column
+// references can be resolved by name. row.ID carries the row's id so ROWID()
+// can resolve.
+func evalExpr(expr *Expr, columns []string, row Row, args []any) (any, error) {
 	if expr == nil {
 		return nil, fmt.Errorf("eval: nil expression")
 	}
@@ -43,16 +46,16 @@ func evalExpr(expr *Expr, columns []string, values []any, args []any) (any, erro
 			return nil, fmt.Errorf("eval: no such column %q", expr.Column)
 		}
 
-		return values[idx], nil
+		return row.Values[idx], nil
 
 	case BinaryKind:
-		left, err := evalExpr(expr.Binary.Left, columns, values, args)
+		left, err := evalExpr(expr.Binary.Left, columns, row, args)
 
 		if err != nil {
 			return nil, err
 		}
 
-		right, err := evalExpr(expr.Binary.Right, columns, values, args)
+		right, err := evalExpr(expr.Binary.Right, columns, row, args)
 
 		if err != nil {
 			return nil, err
@@ -61,11 +64,27 @@ func evalExpr(expr *Expr, columns []string, values []any, args []any) (any, erro
 		return evalBinary(expr.Binary.Op, left, right)
 
 	case FuncKind:
-		return nil, fmt.Errorf("eval: function calls not implemented")
+		return evalFunc(expr, row, args)
 
 	default:
 		return nil, fmt.Errorf("eval: unsupported expression kind %d", expr.Kind)
 	}
+}
+
+func evalFunc(expr *Expr, row Row, args []any) (any, error) {
+	switch expr.FuncCall.Name {
+	case UuidFunc:
+		return uuid.New(), nil
+
+	case RowIdFunc:
+		if row.ID == 0 {
+			return nil, fmt.Errorf("eval: ROWID() has no row context")
+		}
+
+		return int64(row.ID), nil
+	}
+
+	return nil, fmt.Errorf("eval: function %q not implemented", expr.FuncCall.Name)
 }
 
 func findColumn(columns []string, name string) int {
@@ -279,8 +298,9 @@ func exprString(expr *Expr) string {
 }
 
 // evalDefaultExpr evaluates a column's DEFAULT expression to a literal value.
-// A column with no default yields NULL.
-func evalDefaultExpr(col Column, columns []string, values []any) (any, error) {
+// A column with no default yields NULL. row.ID carries the id of the row
+// being inserted (0 if none), so ROWID() in a default can resolve.
+func evalDefaultExpr(col Column, columns []string, row Row) (any, error) {
 	if col.defaultExpr == "" {
 		return nil, nil
 	}
@@ -299,7 +319,7 @@ func evalDefaultExpr(col Column, columns []string, values []any) (any, error) {
 		return nil, fmt.Errorf("Insert: invalid default for column %q: %w", col.name, err)
 	}
 
-	val, err := evalExpr(expr, columns, values, nil)
+	val, err := evalExpr(expr, columns, row, nil)
 
 	if err != nil {
 		return nil, fmt.Errorf("Insert: invalid default for column %q: %w", col.name, err)

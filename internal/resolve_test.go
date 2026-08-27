@@ -87,6 +87,70 @@ func mustCreateIndex(t *testing.T, query string) *CreateIdxStmt {
 	return stmt.createIdxStmt
 }
 
+func mustCreate(t *testing.T, query string) *CreateStmt {
+	t.Helper()
+	parsed := mustParse(t, query)
+	require.NotNil(t, parsed.Create)
+	stmt, err := resolveCreate(parsed.Create)
+	require.NoError(t, err)
+	require.NotNil(t, stmt.createStmt)
+	return stmt.createStmt
+}
+
+func TestResolveCreateUniqueAndPrimaryKey(t *testing.T) {
+	stmt := mustCreate(t, "CREATE TABLE foo (id TEXT PRIMARY KEY, name TEXT UNIQUE, value REAL)")
+	require.Equal(t, []string{"id", "name"}, stmt.uniqueCols)
+}
+
+func TestResolveCreateNoKeys(t *testing.T) {
+	stmt := mustCreate(t, "CREATE TABLE foo (id TEXT, value REAL)")
+	require.Empty(t, stmt.uniqueCols)
+}
+
+func TestResolveCreateMultiplePrimaryKeys(t *testing.T) {
+	parsed := mustParse(t, "CREATE TABLE foo (id TEXT PRIMARY KEY, name TEXT PRIMARY KEY)")
+	_, err := resolveCreate(parsed.Create)
+	require.Error(t, err)
+	assertErrContains(t, err, "multiple primary keys")
+}
+
+func TestResolveCreateUniqueAndPrimaryKeyOnSameColumn(t *testing.T) {
+	stmt := mustCreate(t, "CREATE TABLE foo (id TEXT PRIMARY KEY UNIQUE)")
+	require.Equal(t, []string{"id"}, stmt.uniqueCols)
+}
+
+func TestResolveCreateIntegerPrimaryKeyDefault(t *testing.T) {
+	stmt := mustCreate(t, "CREATE TABLE foo (id INTEGER PRIMARY KEY, name TEXT)")
+	require.Equal(t, "ROWID()", stmt.columns[0].defaultExpr)
+	require.Empty(t, stmt.columns[1].defaultExpr)
+}
+
+func TestResolveCreateUUIDPrimaryKeyDefault(t *testing.T) {
+	stmt := mustCreate(t, "CREATE TABLE foo (id UUID PRIMARY KEY, name TEXT)")
+	require.Equal(t, "NEW_UUID()", stmt.columns[0].defaultExpr)
+}
+
+func TestResolveCreateTextPrimaryKeyNoDefault(t *testing.T) {
+	stmt := mustCreate(t, "CREATE TABLE foo (id TEXT PRIMARY KEY, name TEXT)")
+	require.Empty(t, stmt.columns[0].defaultExpr)
+}
+
+func TestResolveCreateExplicitDefaultWins(t *testing.T) {
+	stmt := mustCreate(t, "CREATE TABLE foo (id INTEGER PRIMARY KEY DEFAULT 42, name TEXT)")
+	require.Equal(t, "42", stmt.columns[0].defaultExpr)
+}
+
+func TestResolveCreateUniqueColumnNoDefault(t *testing.T) {
+	stmt := mustCreate(t, "CREATE TABLE foo (id TEXT UNIQUE, name TEXT)")
+	require.Empty(t, stmt.columns[0].defaultExpr)
+}
+
+func assertErrContains(t *testing.T, err error, msg string) {
+	t.Helper()
+	require.NotNil(t, err)
+	require.Contains(t, err.Error(), msg)
+}
+
 func mustInsert(t *testing.T, query string) *InsertStmt {
 	t.Helper()
 	parsed := mustParse(t, query)

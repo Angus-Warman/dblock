@@ -43,6 +43,8 @@ func (s *IndexScanner) Next() ([]byte, Row, bool, error) {
 		return nil, Row{}, false, err
 	}
 
+	row.ID = DecodeKey(encodedRowID)
+
 	return encodedRowID, row, true, nil
 }
 

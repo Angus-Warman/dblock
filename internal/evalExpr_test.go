@@ -3,6 +3,7 @@ package internal
 import (
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 )
 
@@ -20,7 +21,7 @@ func TestEvalLiterals(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := evalExpr(&tt.expr, nil, nil, []any{"sure"})
+			got, err := evalExpr(&tt.expr, nil, Row{}, []any{"sure"})
 			require.NoError(t, err)
 			require.Equal(t, tt.want, got)
 		})
@@ -29,14 +30,14 @@ func TestEvalLiterals(t *testing.T) {
 
 func TestEvalColumn(t *testing.T) {
 	expr := &Expr{Kind: ColumnExpr, Column: "a"}
-	got, err := evalExpr(expr, []string{"a", "b"}, []any{3.5, 4.5}, nil)
+	got, err := evalExpr(expr, []string{"a", "b"}, Row{Values: []any{3.5, 4.5}}, nil)
 	require.NoError(t, err)
 	require.Equal(t, 3.5, got)
 }
 
 func TestEvalColumnUnknown(t *testing.T) {
 	expr := &Expr{Kind: ColumnExpr, Column: "nope"}
-	_, err := evalExpr(expr, []string{"a"}, []any{1}, nil)
+	_, err := evalExpr(expr, []string{"a"}, Row{Values: []any{1}}, nil)
 	require.Error(t, err)
 }
 
@@ -120,9 +121,55 @@ func TestEvalResolvedExpression(t *testing.T) {
 	resolved, err := NewExprMachine().resolveExpr(expr)
 	require.NoError(t, err)
 
-	got, err := evalExpr(resolved, []string{"a", "b"}, []any{3.5, 4.5}, nil)
+	got, err := evalExpr(resolved, []string{"a", "b"}, Row{Values: []any{3.5, 4.5}}, nil)
 	require.NoError(t, err)
 	require.Equal(t, 15.75, got)
+}
+
+func TestEvalUuidFunc(t *testing.T) {
+	expr := &Expr{Kind: FuncKind, FuncCall: &FuncExpr{Name: UuidFunc}}
+	got, err := evalFunc(expr, Row{}, nil)
+	require.NoError(t, err)
+
+	id, ok := got.(uuid.UUID)
+	require.True(t, ok, "UUID() should return a uuid.UUID, got %T", got)
+	require.NotEqual(t, uuid.Nil, id)
+}
+
+func TestEvalRowIdFunc(t *testing.T) {
+	expr := &Expr{Kind: FuncKind, FuncCall: &FuncExpr{Name: RowIdFunc}}
+	got, err := evalFunc(expr, Row{ID: 7}, nil)
+	require.NoError(t, err)
+	require.Equal(t, int64(7), got)
+}
+
+func TestEvalRowIdFuncNoContext(t *testing.T) {
+	expr := &Expr{Kind: FuncKind, FuncCall: &FuncExpr{Name: RowIdFunc}}
+	_, err := evalFunc(expr, Row{}, nil)
+	require.Error(t, err)
+}
+
+func TestEvalUnsupportedFunc(t *testing.T) {
+	expr := &Expr{Kind: FuncKind, FuncCall: &FuncExpr{Name: "NOPE"}}
+	_, err := evalFunc(expr, Row{}, nil)
+	require.Error(t, err)
+}
+
+func TestResolveRowIdAndUuidFuncs(t *testing.T) {
+	for _, name := range []string{"ROWID", "NEW_UUID"} {
+		p := mustParse(t, "SELECT "+name+"() FROM foo")
+		expr, err := NewExprMachine().resolveExpr(p.Select.List.Items[0].Expr)
+		require.NoError(t, err)
+		require.Equal(t, FuncKind, expr.Kind)
+		require.Equal(t, FuncName(name), expr.FuncCall.Name)
+		require.Empty(t, expr.FuncCall.Args)
+	}
+}
+
+func TestResolveRowIdFuncWithArgsRejected(t *testing.T) {
+	p := mustParse(t, "SELECT ROWID(1) FROM foo")
+	_, err := NewExprMachine().resolveExpr(p.Select.List.Items[0].Expr)
+	require.Error(t, err)
 }
 
 func TestResolveProjectionExpression(t *testing.T) {

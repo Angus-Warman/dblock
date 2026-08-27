@@ -46,6 +46,8 @@ const (
 	MinFunc   FuncName = "MIN"
 	SumFunc   FuncName = "SUM"
 	AvgFunc   FuncName = "AVG"
+	RowIdFunc FuncName = "ROWID"
+	UuidFunc  FuncName = "NEW_UUID"
 )
 
 type FuncExpr struct {
@@ -281,10 +283,14 @@ func (m *exprMachine) resolveFuncCall(fc *parser.FuncCall) (*Expr, error) {
 	name := FuncName(fc.Name)
 
 	switch name {
-	case CountFunc, MinFunc, MaxFunc, SumFunc, AvgFunc:
+	case CountFunc, MinFunc, MaxFunc, SumFunc, AvgFunc, RowIdFunc, UuidFunc:
 		// do nothing
 	default:
 		return nil, fmt.Errorf("%q function not supported", name)
+	}
+
+	if (name == RowIdFunc || name == UuidFunc) && len(fc.Args) > 0 {
+		return nil, fmt.Errorf("%q function takes no arguments", name)
 	}
 
 	args := make([]Expr, len(fc.Args))

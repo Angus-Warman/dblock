@@ -21,6 +21,7 @@ func (s *FullScanner) Next() (key []byte, row Row, ok bool, err error) {
 	}
 
 	row, err = DecodeRow(v)
+	row.ID = DecodeKey(k)
 	return k, row, true, nil
 }
 
